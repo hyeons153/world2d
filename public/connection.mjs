@@ -1,6 +1,8 @@
 import { hosted, roomUrl } from "./config.mjs";
 import { KEEPALIVE } from "./protocol.mjs";
 
+export const roomAvailable = !hosted || Boolean(roomUrl);
+
 export class Connection {
   socket;
   retry;
@@ -23,7 +25,7 @@ export class Connection {
 
   open() {
     if (!this.active) return;
-    if (hosted && !roomUrl) {
+    if (!roomAvailable) {
       this.stop();
       this.events.ended(0);
       return;
