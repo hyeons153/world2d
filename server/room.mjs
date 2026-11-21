@@ -1,4 +1,5 @@
-import { encodeSnapshot, FLOOR, INPUT_LEASE, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite, DEFAULTS, WIDTH } from "../public/protocol.mjs";
+import { advancePlayer, movementDirection, WALK_SPEED } from "../public/movement.mjs";
+import { encodeSnapshot, FLOOR, INPUT_LEASE, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite, DEFAULTS } from "../public/protocol.mjs";
 
 const PULSE = 50;
 const EXPIRE = 38_000;
@@ -169,14 +170,14 @@ export class Room {
       player.keys = 0;
       player.nextAction = now;
     }
-    let move = 0;
-    let speed = 47;
+    let direction = 0;
+    let speed = WALK_SPEED;
     let pose = POSE.idle;
     let jump = player.jumpQueued;
     player.jumpQueued = false;
     if (player.keys) {
-      move = Number(Boolean(player.keys & KEY.right)) - Number(Boolean(player.keys & KEY.left));
-      if (move) pose = POSE.walk;
+      direction = movementDirection(player.keys);
+      if (direction) pose = POSE.walk;
       player.nextAction = now;
     } else {
       const grounded = player.y === FLOOR;
@@ -184,23 +185,15 @@ export class Room {
       pose = player.autoPose ?? POSE.idle;
       if (pose === POSE.walk || pose === POSE.run) {
         const delta = player.target - player.x;
-        move = Math.abs(delta) > 2 ? Math.sign(delta) : 0;
+        direction = Math.abs(delta) > 2 ? Math.sign(delta) : 0;
         speed = pose === POSE.run ? 57 : 26;
-        if (!move) {
+        if (!direction) {
           player.autoPose = POSE.idle;
           pose = POSE.idle;
         }
       }
     }
-    if (jump && player.y === FLOOR) player.vy = -122;
-    if (move) player.facing = move;
-    player.x = Math.max(20, Math.min(WIDTH - 20, player.x + move * speed * dt));
-    if (player.y !== FLOOR || player.vy < 0) {
-      player.vy += 360 * dt;
-      player.y = Math.min(FLOOR, player.y + player.vy * dt);
-      if (player.y === FLOOR) player.vy = 0;
-    }
-    player.pose = player.y < FLOOR ? POSE.jump : pose;
+    advancePlayer(player, { direction, speed, jump, pose }, dt);
   }
 
   chooseAction(player, players, now) {
