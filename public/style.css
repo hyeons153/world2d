@@ -15,25 +15,26 @@ body { margin: 0; min-width: 280px; padding-bottom: env(safe-area-inset-bottom);
 button, input { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible { outline: 2px solid #617b4b; outline-offset: 3px; }
-.container { width: min(1140px, calc(100% - 48px)); margin-inline: auto; padding-block: max(16px, env(safe-area-inset-top)) 16px; }
+.container { width: min(1140px, calc(100% - 48px)); margin-inline: auto; }
+.site-header { padding-top: env(safe-area-inset-top); border-bottom: 1px solid var(--line); }
+.header-inner { display: flex; align-items: center; justify-content: space-between; min-height: 48px; gap: 12px; }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 750; }
+main.container { padding-block: 16px; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
 .playground { overflow: hidden; background: #273c34; border: 1px solid #273c34; border-radius: 14px; color: #f4f0dc; box-shadow: 0 6px 22px #34483812; }
 .scene-surface { position: relative; overflow: hidden; background: #273c34; }
 .scene-surface canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; image-rendering: crisp-edges; image-rendering: pixelated; }
 .pip-button {
-  position: absolute;
-  inset: 10px 10px auto auto;
   display: grid;
   place-items: center;
   width: 40px;
   height: 40px;
-  color: #fcfae9;
-  background: #273c34e6;
-  border: 1px solid #edf0d766;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
   border-radius: 8px;
 }
-.pip-button:hover { background: #273c34; }
-.pip-button:focus-visible { outline-color: #d7e899; }
+.pip-button:hover { background: #e9ecde; }
 .game-message {
   position: absolute;
   margin: 0;
@@ -45,7 +46,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid #617b4b; outline-
   border-radius: 6px;
   pointer-events: none;
 }
-.connection-message { inset: 10px auto auto 10px; max-width: calc(100% - 70px); }
+.connection-message { inset: 10px auto auto 10px; max-width: calc(100% - 20px); }
 .play-message { inset: auto 10px 10px; text-align: center; }
 .entry { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 23px 21px 21px; box-shadow: 0 6px 22px #3448380b; }
 .field-label, legend { font-size: 13px; font-weight: 750; display: block; margin-bottom: 8px; }
@@ -73,6 +74,8 @@ button:focus-visible, input:focus-visible { outline: 2px solid #617b4b; outline-
 
 html:has(body[data-playing]) { overflow: hidden; }
 body[data-playing] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
   overflow: hidden;
@@ -80,7 +83,7 @@ body[data-playing] {
 body[data-playing] main {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
-  height: 100%;
+  min-height: 0;
 }
 body[data-playing] .layout { display: flex; align-items: center; justify-content: center; min-height: 0; }
 body[data-playing] .playground {
