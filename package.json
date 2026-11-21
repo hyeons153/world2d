@@ -1,0 +1,13 @@
+{
+  "name": "2dworld",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "node server/local.mjs",
+    "build": "node server/build.mjs",
+    "test": "node --test",
+    "deploy:room": "npx wrangler deploy"
+  }
+}

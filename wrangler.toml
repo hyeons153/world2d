@@ -1,0 +1,15 @@
+name = "pixel-clearing-room"
+main = "server/worker.mjs"
+compatibility_date = "2026-07-01"
+
+[vars]
+# Set this to the exact allowed Vercel origin(s) before deploying.
+ALLOWED_ORIGINS = ""
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Playground"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Playground"]
