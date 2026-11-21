@@ -1,7 +1,7 @@
 import { characters, drawCharacter, readPng } from "./characters.mjs";
 import { Connection, roomAvailable } from "./connection.mjs";
 import { advancePlayer, movementDirection, WALK_SPEED } from "./movement.mjs";
-import { decodeSnapshot, FLOOR, HEIGHT, KEY, nickname, POSE, validSprite, WIDTH } from "./protocol.mjs";
+import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, FLOOR, HEIGHT, KEY, nickname, POSE, validSprite, WIDTH } from "./protocol.mjs";
 import { drawScene, previewPlayers } from "./scene.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -18,7 +18,7 @@ let saved;
 try { saved = JSON.parse(localStorage.getItem(savedKey)); } catch {}
 $("nickname").value = nickname(saved?.name);
 let sprite = validSprite(saved?.sprite) ? saved.sprite : undefined;
-let selected = Object.hasOwn(characters, saved?.character) || (sprite && saved?.character === "custom") ? saved.character : "sprout";
+let selected = sprite && saved?.character === "custom" ? "custom" : builtinCharacter(saved?.character) ?? DEFAULT_CHARACTER;
 let currentFile;
 let reading = 0;
 let loadingImage = false;
