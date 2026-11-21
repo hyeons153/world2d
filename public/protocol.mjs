@@ -4,11 +4,27 @@ export const FLOOR = 170;
 export const LIMIT = 20;
 export const PIXELS = 32;
 export const MAX_MESSAGE = 23_000;
-export const DEFAULTS = ["sprout", "toast", "plum", "puddle", "moth", "ember"];
+export const DEFAULT_CHARACTER = "chiikawa";
+export const DEFAULTS = [DEFAULT_CHARACTER, "usagi", "hachiware", "rakko", "shisa", "kani", "dekatsuyo"];
 export const POSE = { idle: 0, walk: 1, run: 2, jump: 3, sit: 4, wave: 5 };
 export const KEY = { left: 1, right: 2, jump: 4 };
 export const KEEPALIVE = 10_000;
 export const INPUT_LEASE = 3_000;
+
+const legacyCharacters = {
+  sprout: DEFAULT_CHARACTER,
+  toast: "usagi",
+  plum: "hachiware",
+  puddle: "rakko",
+  moth: "shisa",
+  ember: "kani",
+};
+
+export function builtinCharacter(value) {
+  if (typeof value !== "string") return undefined;
+  if (DEFAULTS.includes(value)) return value;
+  return Object.hasOwn(legacyCharacters, value) ? legacyCharacters[value] : undefined;
+}
 
 export function nickname(value) {
   return typeof value === "string"
