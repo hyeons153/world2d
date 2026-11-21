@@ -1,5 +1,5 @@
 import { advancePlayer, movementDirection, WALK_SPEED } from "../public/movement.mjs";
-import { encodeSnapshot, FLOOR, INPUT_LEASE, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite, DEFAULTS } from "../public/protocol.mjs";
+import { builtinCharacter, encodeSnapshot, FLOOR, INPUT_LEASE, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite } from "../public/protocol.mjs";
 
 const PULSE = 50;
 const EXPIRE = 38_000;
@@ -67,7 +67,7 @@ export class Room {
     const custom = message.character === "custom";
     const character = message.character;
     if (typeof message.token !== "string" || !/^[a-f0-9]{32}$/.test(message.token) || !name ||
-        (custom ? !validSprite(message.sprite) : !DEFAULTS.includes(character))) {
+        (custom ? !validSprite(message.sprite) : !builtinCharacter(character))) {
       return this.close(socket, 4004, "profile");
     }
     let player = this.players.get(message.token);
