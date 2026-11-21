@@ -1,12 +1,13 @@
-import { PIXELS, POSE } from "./protocol.mjs";
+import { builtinCharacter, DEFAULT_CHARACTER, PIXELS, POSE } from "./protocol.mjs";
 
 export const characters = {
-  sprout: { name: "새싹", ink: "#253b32", light: "#d2e995", main: "#a6cb6a", dark: "#689d56", trim: "#f0d38b", ears: "leaf" },
-  toast: { name: "토스트", ink: "#583827", light: "#fff0b6", main: "#e7ac68", dark: "#bb7651", trim: "#f5d188", ears: "round" },
-  plum: { name: "자두", ink: "#3b2e51", light: "#f7c2de", main: "#b491cc", dark: "#8269aa", trim: "#f0b4b5", ears: "cat" },
-  puddle: { name: "방울", ink: "#254857", light: "#c7f4e9", main: "#79c7cd", dark: "#50999e", trim: "#deeb9a", ears: "round" },
-  moth: { name: "나비", ink: "#453948", light: "#f6e2fa", main: "#d9b2ca", dark: "#a783a9", trim: "#f5b98d", ears: "moth" },
-  ember: { name: "불씨", ink: "#5c342d", light: "#ffe1ae", main: "#ed8a63", dark: "#b86351", trim: "#f1ca68", ears: "cat" },
+  chiikawa: { name: "치이카와", ink: "#4b3d45", main: "#fffaf5", shade: "#e8dce7", blush: "#f4a4b7" },
+  usagi: { name: "우사기", ink: "#583d31", main: "#ffe5a1", shade: "#eaba74", blush: "#ed9b87" },
+  hachiware: { name: "하치와레", ink: "#3a4561", main: "#fffceb", shade: "#e2e4ee", blush: "#ef9cad", accent: "#719dda" },
+  rakko: { name: "랏코", ink: "#4e362d", main: "#faf1de", shade: "#dbc2a4", blush: "#e8a093", accent: "#9d6850" },
+  shisa: { name: "시사", ink: "#693a30", main: "#fff1c9", shade: "#f2c985", blush: "#ed8d8f", accent: "#ee9e5e" },
+  kani: { name: "카니", ink: "#59404c", main: "#f5bfd8", shade: "#dfa2c0", blush: "#ef7eac", accent: "#e8669c" },
+  dekatsuyo: { name: "데카츠요", ink: "#57402e", main: "#ffe6a1", shade: "#e1b66d", blush: "#f588a8", accent: "#f0cd81" },
 };
 
 const customSprites = new WeakMap();
@@ -25,7 +26,7 @@ function getCustom(sprite) {
 
 export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, phase = 0) {
   const moving = pose === POSE.walk || pose === POSE.run;
-  const step = Math.floor(time / (pose === POSE.run ? 105 : 155) + phase) % 2;
+  const step = Math.floor(time / (pose === POSE.run ? 105 : 155) + phase) & 1;
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
   ctx.scale(facing, 1);
@@ -36,8 +37,7 @@ export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, 
     const bob = moving && sprite.frames === 1 ? step : 0;
     ctx.drawImage(source, frame * PIXELS, 0, PIXELS, PIXELS, -14, -height - bob, 28, height);
   } else {
-    const colors = characters[character] ?? characters.sprout;
-    drawBuiltin(ctx, colors, [moving ? step : 0, pose, time]);
+    drawBuiltin(ctx, builtinCharacter(character) ?? DEFAULT_CHARACTER, moving ? step : 0, pose, time);
   }
   if (pose === POSE.wave) {
     const bob = Math.floor(time / 190) % 2;
@@ -49,58 +49,125 @@ export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, 
   ctx.restore();
 }
 
-function drawBuiltin(ctx, color, [step, pose, time]) {
-  const { ink, light, main, dark, trim, ears } = color;
-  const movement = pose === POSE.walk || pose === POSE.run;
+function drawBuiltin(ctx, id, step, pose, time) {
+  const { ink, main, shade, blush, accent } = characters[id];
   const sit = pose === POSE.sit;
   const jump = pose === POSE.jump;
-  const bob = sit ? 3 : movement ? step : 0;
+  const large = id === "dekatsuyo";
+  const bob = sit ? 2 : step;
+
   function px(fill, x, y, w, h) {
     ctx.fillStyle = fill;
     ctx.fillRect(x, y + bob, w, h);
   }
-  px(ink, -7, -15, 14, 12);
-  px(main, -6, -13, 12, 8);
-  px(dark, -6, -6, 12, 2);
-  px(light, -3, -10, 6, 4);
-  if (sit) px(ink, -8, -4, 16, 1);
-  else {
-    px(ink, step && movement ? -8 : -6, -4, 5, jump ? 2 : 4 - bob);
-    px(ink, step && movement ? 1 : 3, -4, 5, jump ? 3 : 4 - bob);
-    px(dark, step && movement ? -7 : -5, -4, 3, 2);
-    px(trim, step && movement ? 2 : 4, -4, 3, 2);
+
+  function rounded(fill, x, y, w, h) {
+    px(fill, x + 2, y, w - 4, h);
+    px(fill, x + 1, y + 1, w - 2, h - 2);
+    px(fill, x, y + 2, w, h - 4);
   }
-  if (ears === "leaf") {
-    px(ink, -1, -27, 2, 8); px(ink, 0, -28, 7, 5);
-    px(dark, 1, -27, 5, 2); px(light, 1, -26, 3, 1);
-  } else if (ears === "cat") {
-    px(ink, -8, -26, 4, 7); px(ink, 3, -27, 5, 8);
-    px(main, -7, -24, 3, 4); px(trim, 4, -25, 3, 4);
-  } else if (ears === "moth") {
-    px(ink, -6, -27, 2, 7); px(ink, 4, -27, 2, 7);
-    px(trim, -7, -28, 2, 2); px(trim, 5, -28, 2, 2);
-    px(ink, -10, -15, 20, 8); px(dark, -9, -14, 18, 6);
-    px(light, -8, -13, 2, 2); px(light, 6, -12, 2, 2);
-  } else {
-    px(ink, -8, -24, 5, 6); px(ink, 4, -24, 5, 6);
-    px(main, -7, -23, 3, 4); px(main, 5, -23, 3, 4);
+
+  function outline(fill, x, y, w, h) {
+    rounded(ink, x, y, w, h);
+    rounded(fill, x + 1, y + 1, w - 2, h - 2);
   }
-  px(ink, -7, -23, 14, 13);
-  px(ink, -10, -20, 20, 7);
-  px(main, -8, -20, 16, 7);
-  px(main, -6, -22, 12, 10);
-  px(light, -5, -20, 12, 7);
-  px(light, -4, -14, 10, 2);
-  px(trim, -5, -14, 2, 1); px(trim, 5, -14, 2, 1);
+
+  const body = id === "rakko" ? accent : main;
+  if (id === "hachiware" || id === "rakko" || id === "shisa") {
+    outline(accent, -12, -9, 9, 7);
+  }
+  if (!sit) {
+    const stride = pose === POSE.walk || pose === POSE.run;
+    for (const x of stride ? [-7 + step, 3 - step] : [-6, 2]) {
+      px(ink, x, -4, 5, jump ? 3 : 4 - bob);
+      px(shade, x + 1, -4, 3, jump ? 2 : 3 - bob);
+    }
+  }
+  outline(body, large ? -9 : -7, -14, large ? 18 : 14, sit ? 12 : 13);
+  px(shade, -3, -6, 6, 1);
+  outline(body, 5, pose === POSE.wave ? -16 : -11, 7, 7);
+
+  switch (id) {
+    case "usagi":
+      outline(main, -9, -31, 7, 13);
+      outline(main, 2, -31, 7, 13);
+      px(blush, -7, -29, 2, 6);
+      px(blush, 5, -29, 2, 6);
+      break;
+    case "hachiware":
+      for (const x of [-10, 4]) {
+        px(ink, x + 1, -28, 4, 9);
+        px(ink, x, -25, 6, 7);
+        px(accent, x + 1, -25, 4, 7);
+        px(blush, x + 2, -26, 2, 3);
+      }
+      break;
+    case "shisa":
+      for (const [x, y] of [[-13, -24], [-8, -28], [-3, -29], [2, -28], [7, -24], [-13, -18], [7, -18]]) {
+        outline(accent, x, y, 7, 8);
+      }
+      break;
+    case "dekatsuyo":
+      for (const [x, y] of [[-15, -24], [-11, -28], [-5, -30], [1, -29], [7, -26], [-15, -17], [6, -18]]) {
+        outline(accent, x, y, 9, 10);
+      }
+      break;
+    default:
+      outline(accent ?? main, -10, -27, 7, 8);
+      outline(accent ?? main, 3, -27, 7, 8);
+  }
+
+  const faceWidth = large ? 28 : id === "shisa" ? 20 : 22;
+  outline(main, -faceWidth / 2, -24, faceWidth, 17);
+  px(shade, -faceWidth / 2 + 3, -9, faceWidth - 6, 1);
+
+  if (id === "hachiware") {
+    px(accent, -9, -23, 18, 2);
+    px(accent, -9, -21, 7, 2);
+    px(accent, 2, -21, 7, 2);
+    px(main, -1, -23, 2, 3);
+  }
+  if (id === "kani") {
+    px(ink, -9, -24, 18, 2);
+    px(accent, -8, -24, 16, 1);
+    for (const x of [-10, 4]) {
+      outline(accent, x, -30, 7, 8);
+      px(main, x + 3, -30, 1, 3);
+    }
+  }
+  if (id === "shisa") {
+    px(accent, -6, -21, 3, 2);
+    px(accent, 3, -21, 3, 2);
+    px(shade, 0, -22, 1, 3);
+  }
+
   const blink = Math.floor(time + main.charCodeAt(2) * 113) % 4100 > 3980;
-  px(ink, -3, blink ? -16 : -18, 2, blink ? 1 : 3);
-  px(ink, 3, blink ? -16 : -18, 2, blink ? 1 : 3);
-  px(ink, 0, -14, 2, 1);
-  if (!sit && ears !== "moth") {
-    const waving = pose === POSE.wave;
-    px(ink, 6, waving ? -15 : -10, 4, 4);
-    px(light, 7, waving ? -14 : -9, 2, 2);
+  if (large) {
+    for (const x of [-8, 3]) {
+      px("#fffbef", x, -20, 5, 6);
+      px(ink, x + 2, -19, 2, 4);
+      px(ink, x, -21, 4, 1);
+    }
+    px(ink, -3, -14, 7, 4);
+    px("#fcf2d2", -2, -14, 5, 1);
+    px(blush, -1, -11, 3, 4);
+    px(ink, 0, -10, 1, 2);
+    return;
   }
+
+  for (const x of [-5, 3]) {
+    px(ink, x, blink ? -16 : -18, 2, blink || id === "rakko" ? 1 : 3);
+    px(blush, x + (x < 0 ? -2 : 1), -14, 3, 2);
+  }
+  if (id === "rakko") {
+    px(accent, -5, -22, 1, 6);
+    px(accent, -7, -20, 5, 1);
+    px(ink, -1, -15, 3, 1);
+  }
+  px(ink, -2, -13, 1, 2);
+  px(ink, 2, -13, 1, 2);
+  px(ink, -1, -12, 3, 1);
+  if (id === "usagi" || id === "shisa") px(blush, 0, -11, 1, 1);
 }
 
 export async function readPng(file, frames) {
