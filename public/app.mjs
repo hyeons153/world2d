@@ -1,15 +1,18 @@
 import { characters, drawCharacter, readPng } from "./characters.mjs";
-import { Connection } from "./connection.mjs";
-import { decodeSnapshot, HEIGHT, KEY, LIMIT, nickname, POSE, validSprite, WIDTH } from "./protocol.mjs";
+import { Connection, roomAvailable } from "./connection.mjs";
+import { advancePlayer, movementDirection, WALK_SPEED } from "./movement.mjs";
+import { decodeSnapshot, FLOOR, HEIGHT, KEY, nickname, POSE, validSprite, WIDTH } from "./protocol.mjs";
 import { drawScene, previewPlayers } from "./scene.mjs";
 
 const $ = (id) => document.getElementById(id);
 const scene = $("scene");
 const form = $("entry");
+const pipButton = $("pip");
 const savedKey = "pixel-clearing.profile.v1";
 const identityKey = "pixel-clearing.identity.v1";
 const supportsTouch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 const supportsPip = typeof window.documentPictureInPicture?.requestWindow === "function";
+const roomUnavailable = "실시간 공터 서버가 아직 연결되지 않았어요.";
 
 let saved;
 try { saved = JSON.parse(localStorage.getItem(savedKey)); } catch {}
@@ -22,8 +25,10 @@ let loadingImage = false;
 let starting = false;
 let fallbackIdentity;
 let playing = false;
+let localPlayer;
 let ownSlot = -1;
 let connection;
+let state;
 let pipWindow;
 let pipCanvas;
 let stopPipKeys;
@@ -71,7 +76,9 @@ function selectCharacter() {
 }
 
 function joinButton() {
-  $("join").disabled = loadingImage || starting;
+  const busy = loadingImage || starting;
+  $("join").disabled = busy;
+  $("join").setAttribute("aria-busy", String(busy));
 }
 
 async function loadFile() {
@@ -107,6 +114,7 @@ $("file").addEventListener("change", () => {
 $("sprite-sheet").checked = sprite?.frames === 4;
 $("sprite-sheet").addEventListener("change", loadFile);
 renderCharacters();
+joinButton();
 
 function persist(name) {
   try {
@@ -129,14 +137,19 @@ function browserIdentity() {
 
 function setPlaying(next) {
   playing = next;
-  $("layout").toggleAttribute("data-playing", next);
+  document.body.toggleAttribute("data-playing", next);
   form.hidden = next;
-  $("intro").hidden = next;
-  $("connection").hidden = !next;
   $("touch").hidden = !next || !supportsTouch;
-  $("pip").hidden = !next || !supportsPip;
-  $("scene-label").textContent = next ? "공용 공터" : "공터 미리보기";
-  $("scene-meta").textContent = "";
+  pipButton.hidden = !next || !supportsPip;
+  if (next) {
+    window.scrollTo(0, 0);
+  } else {
+    localPlayer = undefined;
+    ownSlot = -1;
+    state = undefined;
+    message("connection-message", "");
+    message("play-message", "");
+  }
 }
 
 form.addEventListener("submit", async (event) => {
@@ -151,22 +164,29 @@ form.addEventListener("submit", async (event) => {
   starting = true;
   joinButton();
   try {
-    const token = await browserIdentity();
     persist(name);
     $("nickname").value = name;
     message("entry-message", "");
     message("play-message", "");
-    connection = new Connection({ token, name, character: selected, sprite: selected === "custom" ? sprite : undefined }, {
+    const profile = { name, character: selected, sprite: selected === "custom" ? sprite : undefined };
+    localPlayer = { ...profile, slot: -1, x: WIDTH / 2, y: FLOOR, vy: 0, facing: 1, pose: POSE.idle };
+    setPlaying(true);
+    showConnection(roomAvailable ? "connecting" : "offline");
+    if (!roomAvailable) return;
+
+    const token = await browserIdentity();
+    connection = new Connection({ token, ...profile }, {
       state: showConnection,
       welcome(slot) {
         ownSlot = slot;
+        localPlayer.slot = slot;
+        localPlayer.jumpQueued = false;
         players.clear();
-        updateCount();
+        if (sent) connection.input(sent);
       },
       roster(entry) {
         if (entry.t === "left") players.delete(entry.slot);
         else players.set(entry.slot, { ...players.get(entry.slot), ...entry });
-        updateCount();
       },
       snapshot(buffer) {
         const now = performance.now();
@@ -185,7 +205,7 @@ form.addEventListener("submit", async (event) => {
         players.clear();
         setPlaying(false);
         const errors = {
-          0: "실시간 공터 서버가 아직 연결되지 않았어요.",
+          0: roomUnavailable,
           4001: "이 브라우저의 다른 탭에서 입장했어요.",
           4003: "공터가 가득 찼거나 연결이 몰렸어요. 잠시 후 다시 들어와 주세요.",
           4004: "닉네임이나 캐릭터를 확인한 뒤 다시 입장해 주세요.",
@@ -193,9 +213,11 @@ form.addEventListener("submit", async (event) => {
         message("entry-message", errors[code] ?? "연결할 수 없었어요. 다시 입장해 주세요.");
       },
     });
-    setPlaying(true);
     connection.start();
   } catch {
+    resetInput();
+    connection?.stop();
+    pipWindow?.close();
     setPlaying(false);
     message("entry-message", "입장을 시작할 수 없어요. 잠시 후 다시 시도해 주세요.");
   } finally {
@@ -204,20 +226,16 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-let state;
 function showConnection(next) {
-  state = next;
-  $("connection").dataset.state = state;
-  if (state !== "online") {
+  if (state === "online" && next !== "online") {
+    const player = players.get(ownSlot);
+    if (player?.point) Object.assign(localPlayer, player.point, interpolate(player, performance.now()), { vy: 0 });
+    players.clear();
     resetInput();
-    $("scene-meta").textContent = "";
   }
-  updateCount();
-}
-
-function updateCount() {
-  $("connection-text").textContent = state === "online" ? "연결됨" : state === "retrying" ? "다시 연결 중" : "연결 중";
-  if (state === "online") $("scene-meta").textContent = players.size + " / " + LIMIT + "명";
+  state = next;
+  const notices = { retrying: "공용 공터에 다시 연결 중", offline: roomUnavailable };
+  message("connection-message", notices[state] ?? "");
 }
 
 function interpolate(player, now) {
@@ -230,12 +248,21 @@ function interpolate(player, now) {
 
 function paint() {
   const now = performance.now();
+  const dt = Math.min((now - lastPaint) / 1000, 0.09);
   lastPaint = now;
   let visible;
   if (playing) {
     visible = [];
     for (const player of players.values()) {
       if (player.point) visible.push({ ...player, ...player.point, ...interpolate(player, now) });
+    }
+    if (!players.get(ownSlot)?.point) {
+      const direction = movementDirection(sent);
+      advancePlayer(localPlayer, {
+        direction, speed: WALK_SPEED, jump: localPlayer.jumpQueued, pose: direction ? POSE.walk : POSE.idle,
+      }, dt);
+      localPlayer.jumpQueued = false;
+      visible.push(localPlayer);
     }
   } else {
     visible = previewPlayers(now);
@@ -269,11 +296,15 @@ function submitInput() {
   for (const key of pressed.values()) mask |= key;
   for (const touch of touches.values()) mask |= touch.key;
   if (mask === sent) return;
+  if (localPlayer && !players.get(ownSlot)?.point && (mask & KEY.jump) && !(sent & KEY.jump)) {
+    localPlayer.jumpQueued = true;
+  }
   sent = mask;
   connection?.input(mask);
 }
 
 function resetInput() {
+  if (localPlayer) localPlayer.jumpQueued = false;
   pressed.clear();
   for (const { button } of touches.values()) delete button.dataset.held;
   touches.clear();
@@ -330,14 +361,20 @@ for (const button of document.querySelectorAll("#touch button")) {
   for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) button.addEventListener(type, release);
 }
 
-$("pip").addEventListener("click", async () => {
+function updatePipButton() {
+  const label = pipWindow ? "PiP 닫기" : "PiP 켜기";
+  pipButton.setAttribute("aria-label", label);
+  pipButton.title = label;
+}
+
+pipButton.addEventListener("click", async () => {
   if (pipWindow && !pipWindow.closed) {
     pipWindow.close();
     return;
   }
   if (!supportsPip || !playing) return;
   resetInput();
-  $("pip").disabled = true;
+  pipButton.disabled = true;
   try {
     const host = await window.documentPictureInPicture.requestWindow({ width: 400, height: 225 });
     pipWindow = host;
@@ -346,7 +383,7 @@ $("pip").addEventListener("click", async () => {
       stopPipKeys?.();
       pipWindow = undefined;
       pipCanvas = undefined;
-      $("pip").lastElementChild.textContent = "PiP 켜기";
+      updatePipButton();
       movePaint();
     }, { once: true });
     if (!playing) {
@@ -364,13 +401,13 @@ $("pip").addEventListener("click", async () => {
     pipCanvas.setAttribute("aria-label", "픽셀 공터");
     host.document.body.append(pipCanvas);
     stopPipKeys = bindKeys(host);
-    $("pip").lastElementChild.textContent = "PiP 닫기";
+    updatePipButton();
     message("play-message", "");
     movePaint();
   } catch {
     pipWindow?.close();
     message("play-message", "PiP를 열 수 없어요. 브라우저 설정을 확인한 뒤 다시 시도해 주세요.");
   } finally {
-    $("pip").disabled = false;
+    pipButton.disabled = false;
   }
 });
