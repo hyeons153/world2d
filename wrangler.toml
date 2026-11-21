@@ -3,8 +3,8 @@ main = "server/worker.mjs"
 compatibility_date = "2026-07-01"
 
 [vars]
-# Set this to the exact allowed Vercel origin(s) before deploying.
-ALLOWED_ORIGINS = ""
+# Only the production site may open a browser WebSocket to this Worker.
+ALLOWED_ORIGINS = "https://world2d.vercel.app"
 
 [[durable_objects.bindings]]
 name = "ROOM"
