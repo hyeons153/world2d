@@ -21,13 +21,14 @@ PC에서 `http://localhost:3000`에 접속합니다. 같은 Wi-Fi의 다른 PC·
 
 1. Cloudflare에서 **Workers Free**를 사용하는 계정으로 Wrangler에 로그인합니다. 새 프로젝트라면 계정의 `workers.dev` 서브도메인을 활성화합니다.
 2. `wrangler.toml`의 `ALLOWED_ORIGINS`를 실제 Vercel 프로덕션 주소로 설정합니다. 여러 주소는 쉼표로 구분합니다. Vercel Preview를 쓰려면 해당 프리뷰의 정확한 주소도 추가합니다.
-3. `npm run deploy:room`으로 실시간 서버를 배포하고 발급된 Worker 주소에서 `wss://<worker-address>/ws`를 확인합니다.
-4. Vercel Hobby에서 GitHub 저장소를 연결하고 Framework Preset은 **Other**를 선택합니다. 루트를 그대로 사용합니다. 빌드 명령 `npm run build`와 출력 디렉터리 `dist`는 `vercel.json`에 들어 있습니다.
-5. Vercel 프로젝트 Production 환경변수 `ROOM_WS_URL`에 3번의 `wss://…/ws` 주소를 설정하고 재배포합니다. 실제 프런트엔드 주소가 2번의 값과 다르면 Worker의 허용 출처를 수정해 재배포합니다.
+3. Cloudflare Workers Builds에 GitHub 저장소를 연결하고 `wrangler.toml`과 같은 이름인 `world2d` Worker로 배포합니다. 로컬에서 배포할 때는 `npm run deploy:room`을 실행합니다.
+4. Vercel Hobby에서 GitHub 저장소를 연결하고 Framework Preset은 **Other**를 선택합니다. 루트를 그대로 사용합니다. `vercel.json`의 빌드 명령은 공개 Worker 주소를 `--room-url`로 전달하고 `dist`를 배포합니다.
+5. Worker 주소가 바뀌면 `vercel.json`의 `--room-url` 뒤에 발급된 `wss://…/ws` 주소를 넣고 재배포합니다. 프런트엔드 주소가 바뀌면 `wrangler.toml`의 `ALLOWED_ORIGINS`도 수정합니다.
 
 | 설정 | 위치 | 용도 |
 | --- | --- | --- |
-| `ROOM_WS_URL` | Vercel 빌드 환경 | 공개 WebSocket 주소. 정적 파일로 생성됩니다. |
+| `--room-url` | `vercel.json`의 빌드 명령 | 공개 WebSocket 주소. 정적 파일로 생성됩니다. |
+| `ROOM_WS_URL` | 빌드 환경 | `--room-url` 인수 없이 빌드할 때 사용하는 공개 WebSocket 주소입니다. |
 | `ALLOWED_ORIGINS` | Cloudflare Worker | 연결을 허용할 프런트엔드 Origin의 목록 |
 | `PORT` | 선택 사항, 로컬 | 기본 `3000` |
 
