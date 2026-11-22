@@ -184,4 +184,6 @@ body[data-playing] .touch { flex-shrink: 0; }
   .header-controls .back-button { min-width: 28px; }
   .auto-move-button { min-width: 62px; }
   .pip-button svg { display: none; }
+  .touch, .touch div { gap: 5px; }
+  .touch button { min-width: 46px; padding-inline: 6px; }
 }
