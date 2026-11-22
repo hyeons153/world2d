@@ -7,6 +7,9 @@ const STOMP_RADIUS = 12;
 const HIT_REACH = 33;
 const HIT_HEIGHT = 19;
 const ATTACK_COOLDOWN = 420;
+const ATTACK_WINDUP = 100;
+const ATTACK_EXTENSION = 140;
+const ATTACK_RECOVERY = 100;
 
 export function movementDirection(keys) {
   return Number(Boolean(keys & KEY.right)) - Number(Boolean(keys & KEY.left));
@@ -81,10 +84,16 @@ export function stepPlayers(players, now, dt) {
   for (const player of players) {
     if (player.y === FLOOR) player.stomped = false;
     movePlayer(player, players, now, dt);
-    if (player.attackQueued && !(now < player.readyAt || now < player.stunnedUntil || now < player.squashUntil)) {
-      player.attackUntil = now + 220;
+    const interrupted = now < player.stunnedUntil || now < player.squashUntil;
+    if (interrupted) {
+      player.strikeAt = undefined;
+      player.punchUntil = 0;
+      player.attackUntil = 0;
+    } else if (player.attackQueued && !(now < player.readyAt)) {
+      player.strikeAt = now + ATTACK_WINDUP;
+      player.punchUntil = 0;
+      player.attackUntil = player.strikeAt + ATTACK_EXTENSION + ATTACK_RECOVERY;
       player.readyAt = now + ATTACK_COOLDOWN;
-      strikes.push(player);
     }
     player.attackQueued = false;
   }
@@ -105,6 +114,7 @@ export function stepPlayers(players, now, dt) {
     }
     if (landedOn) {
       landedOn.squashUntil = now + 340;
+      landedOn.strikeAt = undefined;
       jumper.stomped = true;
       jumper.y = surface;
       jumper.vy = -103;
@@ -112,6 +122,14 @@ export function stepPlayers(players, now, dt) {
     }
   }
 
+  for (const player of players) {
+    if (now >= player.strikeAt) {
+      player.strikeAt = undefined;
+      player.punchUntil = now + ATTACK_EXTENSION;
+      player.attackUntil = player.punchUntil + ATTACK_RECOVERY;
+      strikes.push(player);
+    }
+  }
   for (const attacker of strikes) {
     for (const target of players) {
       const distance = (target.x - attacker.x) * attacker.facing;
@@ -127,6 +145,7 @@ export function stepPlayers(players, now, dt) {
 
   for (const player of players) {
     player.effects = (now < player.attackUntil ? EFFECT.attack : 0) |
+      (now < player.punchUntil ? EFFECT.punch : 0) |
       (now < player.hitUntil ? EFFECT.hit : 0) |
       (now < player.squashUntil ? EFFECT.squash : 0);
   }
