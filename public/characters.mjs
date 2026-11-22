@@ -1,14 +1,22 @@
+import { MASCOT_ATLAS_URL } from "./mascot-atlas.mjs";
 import { builtinCharacter, DEFAULT_CHARACTER, PIXELS, POSE } from "./protocol.mjs";
 
 export const characters = {
-  chiikawa: { name: "치이카와", ink: "#4b3d45", main: "#fffaf5", shade: "#e8dce7", blush: "#f4a4b7" },
-  usagi: { name: "우사기", ink: "#583d31", main: "#ffe5a1", shade: "#eaba74", blush: "#ed9b87" },
-  hachiware: { name: "하치와레", ink: "#3a4561", main: "#fffceb", shade: "#e2e4ee", blush: "#ef9cad", accent: "#719dda" },
-  rakko: { name: "랏코", ink: "#4e362d", main: "#faf1de", shade: "#dbc2a4", blush: "#e8a093", accent: "#9d6850" },
-  shisa: { name: "시사", ink: "#693a30", main: "#fff1c9", shade: "#f2c985", blush: "#ed8d8f", accent: "#ee9e5e" },
-  kani: { name: "카니", ink: "#59404c", main: "#f5bfd8", shade: "#dfa2c0", blush: "#ef7eac", accent: "#e8669c" },
-  dekatsuyo: { name: "데카츠요", ink: "#57402e", main: "#ffe6a1", shade: "#e1b66d", blush: "#f588a8", accent: "#f0cd81" },
+  chiikawa: { name: "치이카와", tile: 0 },
+  usagi: { name: "우사기", tile: 1 },
+  hachiware: { name: "하치와레", tile: 2 },
+  rakko: { name: "랏코", tile: 3 },
+  shisa: { name: "시사", tile: 4 },
+  kani: { name: "카니", tile: 5 },
+  dekatsuyo: { name: "데카츠요", tile: 6 },
+  anoko: { name: "아노코", tile: 7 },
 };
+
+const atlas = typeof Image === "function" ? new Image() : undefined;
+if (atlas) {
+  atlas.src = MASCOT_ATLAS_URL;
+  await atlas.decode();
+}
 
 const customSprites = new WeakMap();
 
@@ -37,7 +45,7 @@ export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, 
     const bob = moving && sprite.frames === 1 ? step : 0;
     ctx.drawImage(source, frame * PIXELS, 0, PIXELS, PIXELS, -14, -height - bob, 28, height);
   } else {
-    drawBuiltin(ctx, builtinCharacter(character) ?? DEFAULT_CHARACTER, moving ? step : 0, pose, time);
+    drawBuiltin(ctx, builtinCharacter(character) ?? DEFAULT_CHARACTER, moving ? step : 0, pose);
   }
   if (pose === POSE.wave) {
     const bob = Math.floor(time / 190) % 2;
@@ -49,125 +57,31 @@ export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, 
   ctx.restore();
 }
 
-function drawBuiltin(ctx, id, step, pose, time) {
-  const { ink, main, shade, blush, accent } = characters[id];
-  const sit = pose === POSE.sit;
-  const jump = pose === POSE.jump;
-  const large = id === "dekatsuyo";
-  const bob = sit ? 2 : step;
-
-  function px(fill, x, y, w, h) {
-    ctx.fillStyle = fill;
-    ctx.fillRect(x, y + bob, w, h);
-  }
-
-  function rounded(fill, x, y, w, h) {
-    px(fill, x + 2, y, w - 4, h);
-    px(fill, x + 1, y + 1, w - 2, h - 2);
-    px(fill, x, y + 2, w, h - 4);
-  }
-
-  function outline(fill, x, y, w, h) {
-    rounded(ink, x, y, w, h);
-    rounded(fill, x + 1, y + 1, w - 2, h - 2);
-  }
-
-  const body = id === "rakko" ? accent : main;
-  if (id === "hachiware" || id === "rakko" || id === "shisa") {
-    outline(accent, -12, -9, 9, 7);
-  }
-  if (!sit) {
-    const stride = pose === POSE.walk || pose === POSE.run;
-    for (const x of stride ? [-7 + step, 3 - step] : [-6, 2]) {
-      px(ink, x, -4, 5, jump ? 3 : 4 - bob);
-      px(shade, x + 1, -4, 3, jump ? 2 : 3 - bob);
-    }
-  }
-  outline(body, large ? -9 : -7, -14, large ? 18 : 14, sit ? 12 : 13);
-  px(shade, -3, -6, 6, 1);
-  outline(body, 5, pose === POSE.wave ? -16 : -11, 7, 7);
-
-  switch (id) {
-    case "usagi":
-      outline(main, -9, -31, 7, 13);
-      outline(main, 2, -31, 7, 13);
-      px(blush, -7, -29, 2, 6);
-      px(blush, 5, -29, 2, 6);
-      break;
-    case "hachiware":
-      for (const x of [-10, 4]) {
-        px(ink, x + 1, -28, 4, 9);
-        px(ink, x, -25, 6, 7);
-        px(accent, x + 1, -25, 4, 7);
-        px(blush, x + 2, -26, 2, 3);
-      }
-      break;
-    case "shisa":
-      for (const [x, y] of [[-13, -24], [-8, -28], [-3, -29], [2, -28], [7, -24], [-13, -18], [7, -18]]) {
-        outline(accent, x, y, 7, 8);
-      }
-      break;
-    case "dekatsuyo":
-      for (const [x, y] of [[-15, -24], [-11, -28], [-5, -30], [1, -29], [7, -26], [-15, -17], [6, -18]]) {
-        outline(accent, x, y, 9, 10);
-      }
-      break;
-    default:
-      outline(accent ?? main, -10, -27, 7, 8);
-      outline(accent ?? main, 3, -27, 7, 8);
-  }
-
-  const faceWidth = large ? 28 : id === "shisa" ? 20 : 22;
-  outline(main, -faceWidth / 2, -24, faceWidth, 17);
-  px(shade, -faceWidth / 2 + 3, -9, faceWidth - 6, 1);
-
+function drawBuiltin(ctx, id, step, pose) {
+  if (!atlas) return;
+  const { tile } = characters[id];
+  const height = pose === POSE.sit ? 28 : pose === POSE.jump ? 31 : PIXELS;
   if (id === "hachiware") {
-    px(accent, -9, -23, 18, 2);
-    px(accent, -9, -21, 7, 2);
-    px(accent, 2, -21, 7, 2);
-    px(main, -1, -23, 2, 3);
+    ctx.fillStyle = "#352c37";
+    ctx.fillRect(10, -7 - step, 5, 4);
+    ctx.fillRect(13, -8 - step, 3, 3);
+    ctx.fillStyle = "#86acca";
+    ctx.fillRect(11, -6 - step, 4, 2);
+    ctx.fillRect(14, -7 - step, 1, 1);
   }
-  if (id === "kani") {
-    px(ink, -9, -24, 18, 2);
-    px(accent, -8, -24, 16, 1);
-    for (const x of [-10, 4]) {
-      outline(accent, x, -30, 7, 8);
-      px(main, x + 3, -30, 1, 3);
-    }
+  ctx.drawImage(atlas, tile * PIXELS, 0, PIXELS, PIXELS, -PIXELS / 2, -height - step, PIXELS, height);
+  if (id === "kani" && (pose === POSE.idle || pose === POSE.sit)) {
+    ctx.fillStyle = "#504049";
+    ctx.fillRect(-6, -8, 12, 6);
+    ctx.fillRect(-6, -9, 5, 1);
+    ctx.fillRect(1, -9, 5, 1);
+    ctx.fillStyle = "#ecedb1";
+    ctx.fillRect(-5, -8, 4, 5);
+    ctx.fillRect(1, -8, 4, 5);
+    ctx.fillStyle = "#b1a578";
+    ctx.fillRect(-4, -6, 2, 1);
+    ctx.fillRect(2, -6, 2, 1);
   }
-  if (id === "shisa") {
-    px(accent, -6, -21, 3, 2);
-    px(accent, 3, -21, 3, 2);
-    px(shade, 0, -22, 1, 3);
-  }
-
-  const blink = Math.floor(time + main.charCodeAt(2) * 113) % 4100 > 3980;
-  if (large) {
-    for (const x of [-8, 3]) {
-      px("#fffbef", x, -20, 5, 6);
-      px(ink, x + 2, -19, 2, 4);
-      px(ink, x, -21, 4, 1);
-    }
-    px(ink, -3, -14, 7, 4);
-    px("#fcf2d2", -2, -14, 5, 1);
-    px(blush, -1, -11, 3, 4);
-    px(ink, 0, -10, 1, 2);
-    return;
-  }
-
-  for (const x of [-5, 3]) {
-    px(ink, x, blink ? -16 : -18, 2, blink || id === "rakko" ? 1 : 3);
-    px(blush, x + (x < 0 ? -2 : 1), -14, 3, 2);
-  }
-  if (id === "rakko") {
-    px(accent, -5, -22, 1, 6);
-    px(accent, -7, -20, 5, 1);
-    px(ink, -1, -15, 3, 1);
-  }
-  px(ink, -2, -13, 1, 2);
-  px(ink, 2, -13, 1, 2);
-  px(ink, -1, -12, 3, 1);
-  if (id === "usagi" || id === "shisa") px(blush, 0, -11, 1, 1);
 }
 
 export async function readPng(file, frames) {
