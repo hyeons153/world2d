@@ -82,7 +82,7 @@ export function stepPlayers(players, now, dt) {
   const previousHeights = players.map((player) => player.y);
   const strikes = [];
   for (const player of players) {
-    if (player.y === FLOOR) player.stomped = false;
+    if (player.y === FLOOR) player.stompedPlayers = undefined;
     movePlayer(player, players, now, dt);
     const interrupted = now < player.stunnedUntil || now < player.squashUntil;
     if (interrupted) {
@@ -100,12 +100,13 @@ export function stepPlayers(players, now, dt) {
 
   for (let index = 0; index < players.length; index++) {
     const jumper = players[index];
-    if (jumper.stomped || jumper.y <= previousHeights[index] || jumper.vy < 0 || now < jumper.stunnedUntil) continue;
+    if (jumper.y <= previousHeights[index] || jumper.vy < 0 || now < jumper.stunnedUntil) continue;
     let landedOn;
     let surface = Infinity;
     for (let target = 0; target < players.length; target++) {
       const other = players[target];
-      if (other === jumper || now < other.squashUntil || Math.abs(jumper.x - other.x) > STOMP_RADIUS) continue;
+      if (other === jumper || jumper.stompedPlayers?.has(other) || now < other.squashUntil ||
+          Math.abs(jumper.x - other.x) > STOMP_RADIUS) continue;
       const head = other.y - HEAD_HEIGHT;
       if (previousHeights[index] <= previousHeights[target] - HEAD_HEIGHT && jumper.y >= head && head < surface) {
         surface = head;
@@ -115,7 +116,8 @@ export function stepPlayers(players, now, dt) {
     if (landedOn) {
       landedOn.squashUntil = now + 340;
       landedOn.strikeAt = undefined;
-      jumper.stomped = true;
+      jumper.stompedPlayers ??= new Set();
+      jumper.stompedPlayers.add(landedOn);
       jumper.y = surface;
       jumper.vy = -103;
       jumper.pose = POSE.jump;
