@@ -11,8 +11,8 @@ export const DEFAULTS = [DEFAULT_CHARACTER, "usagi", "hachiware", "rakko", "shis
 export const POSE = { idle: 0, walk: 1, run: 2, jump: 3, sit: 4, wave: 5 };
 export const KEY = { left: 1, right: 2, jump: 4, attack: 8 };
 export const INPUT_MASK = KEY.left | KEY.right | KEY.jump | KEY.attack;
-export const EFFECT = { attack: 16, hit: 32, squash: 64 };
-export const EFFECT_MASK = EFFECT.attack | EFFECT.hit | EFFECT.squash;
+export const EFFECT = { attack: 16, hit: 32, squash: 64, punch: 128 };
+export const EFFECT_MASK = EFFECT.attack | EFFECT.hit | EFFECT.squash | EFFECT.punch;
 export const KEEPALIVE = 10_000;
 export const INPUT_LEASE = 3_000;
 
