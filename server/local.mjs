@@ -90,8 +90,8 @@ function attachSocket(stream, room, head) {
   if (head.length) parse(head);
 }
 
-export function createPlayground() {
-  const room = new Room();
+export function createPlayground(options) {
+  const room = new Room(options);
   const server = createServer(async (request, response) => {
     const path = new URL(request.url, "http://localhost").pathname;
     const file = path === "/" ? "index.html" : path.slice(1);
@@ -135,6 +135,6 @@ export function createPlayground() {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.env.PORT || 3000);
-  const { server } = createPlayground();
+  const { server } = createPlayground({ practiceNpc: process.env.PRACTICE_NPC !== "0" });
   server.listen(port, "0.0.0.0", () => console.log("Pixel Clearing: http://localhost:" + port));
 }
