@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeSnapshot, EFFECT, FLOOR, KEY, LIMIT, POSE } from "../public/protocol.mjs";
+import { decodeSnapshot, EFFECT, EMOTE_COOLDOWN, FLOOR, KEY, LIMIT, POSE } from "../public/protocol.mjs";
 import { Room } from "../server/room.mjs";
 
 function setup(t, options) {
@@ -27,7 +27,7 @@ function setup(t, options) {
     const input = (keys) => receive({ t: "input", keys });
     const observe = (subject) => packets.findLast((packet) => packet.some(({ slot }) => slot === subject.slot))
       ?.find(({ slot }) => slot === subject.slot);
-    return { player, input, observe, roster, packets };
+    return { player, input, observe, roster, packets, receive };
   };
   const step = (count = 1) => {
     for (let index = 0; index < count; index++) {
@@ -97,9 +97,52 @@ test("a descending jump squashes the player below and bounces exactly once", (t)
   assert.ok(jumper.observe(target.player).effects & EFFECT.squash);
   assert.ok(jumper.player.vy < 0);
   assert.equal(jumper.player.pose, POSE.jump);
+  const squashedUntil = target.player.squashUntil;
   for (let index = 0; index < 24; index++) step();
   assert.equal(target.player.effects, 0);
+  assert.equal(target.player.squashUntil, squashedUntil, "the same player cannot be squashed twice in that jump");
   assert.equal(jumper.player.y, FLOOR);
+  jumper.input(KEY.jump);
+  step();
+  jumper.input(0);
+  for (let index = 0; index < 20 && !(target.player.effects & EFFECT.squash); index++) step();
+  assert.ok(target.player.squashUntil > squashedUntil, "landing resets the next jump");
+});
+
+test("a single jump can bounce off two different players", (t) => {
+  const { enter, step } = setup(t);
+  const jumper = enter(150);
+  const first = enter(150);
+  const second = enter(168);
+  jumper.input(KEY.jump);
+  step();
+  jumper.input(0);
+  for (let index = 0; index < 20 && !(first.player.effects & EFFECT.squash); index++) step();
+  assert.ok(first.player.effects & EFFECT.squash);
+  assert.equal(second.player.effects, 0);
+  const firstStompUntil = first.player.squashUntil;
+  jumper.input(KEY.right);
+  step(6);
+  jumper.input(0);
+  for (let index = 0; index < 10 && !(second.player.effects & EFFECT.squash); index++) step();
+  assert.ok(second.player.effects & EFFECT.squash);
+  assert.ok(jumper.player.vy < 0, "the second target also bounces the jumper");
+  assert.equal(first.player.squashUntil, firstStompUntil, "the first target cannot trigger another bounce mid-jump");
+});
+
+test("valid emotes are relayed to other players from the server-assigned slot", (t) => {
+  const { enter, step } = setup(t);
+  const sender = enter(150);
+  const viewer = enter(175);
+  const received = () => viewer.roster.filter(({ t }) => t === "emote");
+  sender.receive({ t: "emote", emote: 5 });
+  sender.receive({ t: "emote", emote: 1, slot: viewer.player.slot });
+  sender.receive({ t: "emote", emote: 2 });
+  assert.deepEqual(received(), [{ t: "emote", slot: sender.player.slot, emote: 1 }]);
+  assert.ok(!sender.roster.some(({ t }) => t === "emote"), "the sender already displayed its own emote");
+  step(Math.ceil(EMOTE_COOLDOWN / 50));
+  sender.receive({ t: "emote", emote: 4 });
+  assert.deepEqual(received().at(-1), { t: "emote", slot: sender.player.slot, emote: 4 });
 });
 
 test("the optional practice NPC can be hit and does not use a player slot", (t) => {
