@@ -15,9 +15,17 @@
     <header class="site-header">
       <div class="container header-inner">
         <span class="brand"><img src="./sprout.svg" alt="" width="22" height="22">픽셀 공터</span>
-        <button type="button" class="pip-button" id="pip" aria-label="PiP 켜기" title="PiP 켜기" hidden>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><rect x="12" y="11" width="6" height="5" rx=".6"></rect></svg>
-        </button>
+        <div class="header-controls">
+          <select class="background-select" id="background-select" aria-label="맵 배경">
+            <option value="original">기존 배경</option>
+            <option value="white">화이트</option>
+            <option value="black">블랙</option>
+          </select>
+          <button type="button" class="auto-move-button" id="auto-move" aria-pressed="true" hidden>자동이동 <span aria-hidden="true">ON</span></button>
+          <button type="button" class="pip-button" id="pip" aria-label="PiP 켜기" title="PiP 켜기" hidden>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><rect x="12" y="11" width="6" height="5" rx=".6"></rect></svg>
+          </button>
+        </div>
       </div>
     </header>
     <main class="container">
