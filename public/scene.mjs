@@ -1,5 +1,6 @@
 import { characters, drawCharacter, RENDER_SCALE } from "./characters.mjs";
-import { EFFECT, WIDTH, HEIGHT, FLOOR, POSE } from "./protocol.mjs";
+import { drawEmote, EMOTE_SIZE } from "./emotes.mjs";
+import { EFFECT, WIDTH, HEIGHT, FLOOR, POSE, validEmote } from "./protocol.mjs";
 
 function pixels(ctx, color, x, y, width, height) {
   ctx.fillStyle = color;
@@ -183,22 +184,18 @@ export function drawScene(canvas, players, now, ownSlot = -1, background = "orig
   ctx.font = "bold 9px system-ui, sans-serif";
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
-  const labels = [];
   for (const player of ordered) {
     if (!player.name) continue;
     const width = Math.min(104, Math.ceil(ctx.measureText(player.name).width + 8));
-    const x = Math.min(WIDTH - width / 2 - 2, Math.max(width / 2 + 2, Math.round(player.x)));
-    const y = Math.round(player.y) - 38;
-    let row = y;
-    // A few stacked nickname rows keep crowded characters readable without moving them.
-    while (row > y - 38 && labels.some((tag) => Math.abs(tag.x - x) * 2 < tag.width + width + 4 && Math.abs(tag.row - row) < 12)) row -= 12;
-    labels.push({ x, row, width, player });
-  }
-  for (const { x, row, width, player } of labels) {
+    const emote = validEmote(player.emote) ? player.emote : undefined;
+    const extent = emote ? Math.max(width, EMOTE_SIZE) : width;
+    const x = Math.min(WIDTH - extent / 2 - 2, Math.max(extent / 2 + 2, Math.round(player.x)));
+    const row = Math.round(player.y) - 38;
     const mine = player.slot === ownSlot;
     pixels(ctx, mine ? "#eef1ad" : "#344d49", x - width / 2, row - 5, width, 11);
     ctx.fillStyle = mine ? "#324437" : "#fff3d5";
     ctx.fillText(player.name, x, row + 0.5, width - 5);
+    if (emote) drawEmote(ctx, emote, Math.round(x) - Math.floor(EMOTE_SIZE / 2), row - EMOTE_SIZE - 7);
   }
 }
 
