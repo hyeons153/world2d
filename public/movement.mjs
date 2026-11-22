@@ -81,6 +81,7 @@ export function movePlayer(player, players, now, dt) {
 export function stepPlayers(players, now, dt) {
   const previousHeights = players.map((player) => player.y);
   const strikes = [];
+  const impacts = [];
   for (const player of players) {
     if (player.y === FLOOR) player.stompedPlayers = undefined;
     movePlayer(player, players, now, dt);
@@ -140,6 +141,7 @@ export function stepPlayers(players, now, dt) {
       target.hitUntil = now + 230;
       target.stunnedUntil = now + 230;
       target.knockback = attacker.facing;
+      impacts.push({ slot: target.slot, side: -attacker.facing });
       // The next simulation ticks carry the target away from the attacker.
       target.x = Math.max(20, Math.min(WIDTH - 20, target.x + target.knockback * 4));
     }
@@ -151,6 +153,7 @@ export function stepPlayers(players, now, dt) {
       (now < player.hitUntil ? EFFECT.hit : 0) |
       (now < player.squashUntil ? EFFECT.squash : 0);
   }
+  return impacts;
 }
 
 function chooseAction(player, players, now) {
