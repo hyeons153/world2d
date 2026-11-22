@@ -312,6 +312,10 @@ form.addEventListener("submit", async (event) => {
         const player = players.get(slot);
         if (player) Object.assign(player, { emote, emoteUntil: performance.now() + EMOTE_DURATION });
       },
+      impact(slot, side) {
+        const player = players.get(slot);
+        if (player) player.impactSide = side;
+      },
       snapshot(buffer) {
         const now = performance.now();
         for (const sample of decodeSnapshot(buffer)) {
