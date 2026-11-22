@@ -1,5 +1,5 @@
 import { hosted, roomUrl } from "./config.mjs";
-import { KEEPALIVE } from "./protocol.mjs";
+import { KEEPALIVE, validEmote } from "./protocol.mjs";
 
 export const roomAvailable = !hosted || Boolean(roomUrl);
 
@@ -55,6 +55,8 @@ export class Connection {
         this.events.state("online");
       } else if (message.t === "player" || message.t === "left") {
         this.events.roster(message);
+      } else if (this.joined && message.t === "emote" && validEmote(message.emote)) {
+        this.events.emote(message.slot, message.emote);
       }
     });
     socket.addEventListener("close", (event) => {
@@ -88,6 +90,10 @@ export class Connection {
 
   input(keys) {
     if (this.joined) this.send({ t: "input", keys });
+  }
+
+  emote(emote) {
+    if (this.joined) this.send({ t: "emote", emote });
   }
 
   setAutoMove(enabled) {
