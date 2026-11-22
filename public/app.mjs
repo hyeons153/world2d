@@ -1,7 +1,7 @@
 import { characters, drawCharacter, readSprite, RENDER_SCALE } from "./characters.mjs";
 import { Connection, roomAvailable } from "./connection.mjs";
 import { queueInput, setAutoMove, stepPlayers } from "./movement.mjs";
-import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, FLOOR, HEIGHT, KEY, nickname, PIXELS, POSE, validSprite, WIDTH } from "./protocol.mjs";
+import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, EMOTE_COOLDOWN, EMOTE_DURATION, FLOOR, HEIGHT, KEY, nickname, PIXELS, POSE, validSprite, WIDTH } from "./protocol.mjs";
 import { drawScene, previewPlayers } from "./scene.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -308,6 +308,10 @@ form.addEventListener("submit", async (event) => {
         if (entry.t === "left") players.delete(entry.slot);
         else players.set(entry.slot, { ...players.get(entry.slot), ...entry });
       },
+      emote(slot, emote) {
+        const player = players.get(slot);
+        if (player) Object.assign(player, { emote, emoteUntil: performance.now() + EMOTE_DURATION });
+      },
       snapshot(buffer) {
         const now = performance.now();
         for (const sample of decodeSnapshot(buffer)) {
@@ -375,11 +379,17 @@ function paint() {
   if (playing) {
     visible = [];
     for (const player of players.values()) {
-      if (player.point) visible.push({ ...player, ...player.point, ...interpolate(player, now) });
+      if (player.point) {
+        const expression = player.slot === ownSlot ? localPlayer : player;
+        visible.push({
+          ...player, ...player.point, ...interpolate(player, now),
+          emote: now < expression.emoteUntil ? expression.emote : undefined,
+        });
+      }
     }
     if (!players.get(ownSlot)?.point) {
       stepPlayers([localPlayer], now, dt);
-      visible.push(localPlayer);
+      visible.push({ ...localPlayer, emote: now < localPlayer.emoteUntil ? localPlayer.emote : undefined });
     }
   } else {
     visible = previewPlayers(now);
@@ -404,6 +414,10 @@ const controls = {
   ArrowLeft: KEY.left, ArrowRight: KEY.right,
   KeyC: KEY.jump, Space: KEY.jump,
   KeyZ: KEY.attack, ControlLeft: KEY.attack, ControlRight: KEY.attack,
+};
+const emoteKeys = {
+  Digit1: 1, Digit2: 2, Digit3: 3, Digit4: 4,
+  Numpad1: 1, Numpad2: 2, Numpad3: 3, Numpad4: 4,
 };
 const pressed = new Map();
 const touches = new Map();
@@ -437,8 +451,9 @@ function resetInput() {
 function bindKeys(host) {
   function onKey(event) {
     const key = controls[event.code];
+    const emote = emoteKeys[event.code];
     const target = event.target;
-    if (!playing || !key || (pipWindow ? host !== pipWindow : host !== window)) return;
+    if (!playing || (!key && !emote) || (pipWindow ? host !== pipWindow : host !== window)) return;
     if (event.type === "keyup" && pressed.delete(event.code)) {
       event.preventDefault();
       submitInput();
@@ -447,6 +462,15 @@ function bindKeys(host) {
     if (target?.matches?.("input, textarea, [contenteditable], select") ||
         (target?.matches?.("button, a") && event.code === "Space")) return;
     if (event.altKey || event.metaKey || (event.ctrlKey && event.code === "KeyZ")) return;
+    if (emote) {
+      if (event.type === "keydown" && !event.repeat && !event.ctrlKey && !event.shiftKey) {
+        const now = performance.now();
+        if (now < (localPlayer.emoteReadyAt ?? 0)) return;
+        Object.assign(localPlayer, { emote, emoteUntil: now + EMOTE_DURATION, emoteReadyAt: now + EMOTE_COOLDOWN });
+        connection?.emote(emote);
+      }
+      return;
+    }
     event.preventDefault();
     if (event.type === "keydown" && !event.repeat) pressed.set(event.code, key);
     submitInput();
