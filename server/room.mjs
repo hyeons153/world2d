@@ -1,10 +1,11 @@
 import { queueInput, setAutoMove, stepPlayers } from "../public/movement.mjs";
-import { builtinCharacter, encodeSnapshot, FLOOR, INPUT_LEASE, INPUT_MASK, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite } from "../public/protocol.mjs";
+import { builtinCharacter, encodeSnapshot, FLOOR, INPUT_LEASE, INPUT_MASK, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite } from "../public/protocol.mjs";
 
 const PULSE = 50;
 const EXPIRE = 38_000;
 const GRACE = 14_000;
 const SPAWN = [141, 254, 190, 114, 265, 214, 163, 240, 125, 202];
+const PRACTICE_X = 166;
 const between = (min, max) => min + Math.random() * (max - min);
 
 export class Room {
@@ -13,6 +14,16 @@ export class Room {
   timer;
   lastStep = 0;
   lastSnapshot = 0;
+
+  constructor({ practiceNpc = false } = {}) {
+    if (practiceNpc) {
+      this.practiceNpc = {
+        slot: LIMIT, name: "연습 NPC", character: "rakko",
+        x: PRACTICE_X, y: FLOOR, vy: 0, facing: -1, pose: POSE.idle,
+        autoMove: false, keys: 0, inputUntil: Infinity,
+      };
+    }
+  }
 
   accept(socket) {
     if (this.peers.size >= LIMIT + 20) {
@@ -106,6 +117,7 @@ export class Room {
 
     this.send(socket, { t: "welcome", slot });
     for (const member of this.active()) this.send(socket, this.profile(member));
+    if (this.practiceNpc) this.send(socket, this.profile(this.practiceNpc));
     if (announce) this.broadcast(this.profile(player), socket);
     this.snapshot();
   }
@@ -134,7 +146,13 @@ export class Room {
   }
 
   snapshot() {
-    this.broadcast(encodeSnapshot(this.active()));
+    const players = this.active();
+    const npc = this.practiceNpc;
+    // Keep each packet within the snapshot limit understood by already-open clients.
+    const separateNpc = npc && players.length === LIMIT;
+    if (npc && !separateNpc) players.push(npc);
+    this.broadcast(encodeSnapshot(players));
+    if (separateNpc) this.broadcast(encodeSnapshot([npc]));
     this.lastSnapshot = Date.now();
   }
 
@@ -169,8 +187,17 @@ export class Room {
       if (!player.socket && now - player.disconnectedAt > GRACE) this.players.delete(token);
     }
     const players = this.active();
-    stepPlayers(players, now, dt);
-    if (players.length && now - this.lastSnapshot >= 95) this.snapshot();
+    if (players.length) {
+      const npc = this.practiceNpc;
+      if (npc) {
+        const distance = PRACTICE_X - npc.x;
+        const recoverAt = Math.max(npc.hitUntil ?? 0, npc.squashUntil ?? 0) + 1_200;
+        npc.keys = now >= recoverAt && Math.abs(distance) > 3 ? (distance < 0 ? KEY.left : KEY.right) : 0;
+        players.push(npc);
+      }
+      stepPlayers(players, now, dt);
+      if (now - this.lastSnapshot >= 95) this.snapshot();
+    }
     if (!this.peers.size && !this.players.size) {
       clearInterval(this.timer);
       this.timer = undefined;
