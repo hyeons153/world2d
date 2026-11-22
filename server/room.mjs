@@ -1,5 +1,5 @@
-import { movePlayer, setAutoMove } from "../public/movement.mjs";
-import { builtinCharacter, encodeSnapshot, FLOOR, INPUT_LEASE, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite } from "../public/protocol.mjs";
+import { queueInput, setAutoMove, stepPlayers } from "../public/movement.mjs";
+import { builtinCharacter, encodeSnapshot, FLOOR, INPUT_LEASE, INPUT_MASK, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite } from "../public/protocol.mjs";
 
 const PULSE = 50;
 const EXPIRE = 38_000;
@@ -54,10 +54,9 @@ export class Room {
       this.send(socket, { t: "pong" });
     } else if (message.t === "auto-move" && typeof message.enabled === "boolean") {
       setAutoMove(peer.player, message.enabled, now);
-    } else if (message.t === "input" && Number.isInteger(message.keys) && message.keys >= 0 && message.keys <= 7) {
+    } else if (message.t === "input" && Number.isInteger(message.keys) && message.keys >= 0 && message.keys <= INPUT_MASK) {
       const player = peer.player;
-      if (message.keys & KEY.jump && !(player.keys & KEY.jump)) player.jumpQueued = true;
-      player.keys = message.keys;
+      queueInput(player, message.keys);
       player.inputUntil = now + INPUT_LEASE;
       // An idle player can resume automatic movement on the next tick.
       if (!player.keys) player.nextAction = now;
@@ -99,7 +98,7 @@ export class Room {
       player.sprite?.frames !== sprite?.frames || player.sprite?.pixels !== sprite?.pixels ||
       player.sprite?.animation?.pixels !== sprite?.animation?.pixels ||
       player.sprite?.animation?.delays.join() !== sprite?.animation?.delays.join();
-    Object.assign(player, { slot, name, character, sprite, socket, keys: 0, inputUntil: 0, jumpQueued: false });
+    Object.assign(player, { slot, name, character, sprite, socket, keys: 0, inputUntil: 0, jumpQueued: false, attackQueued: false });
     setAutoMove(player, message.autoMove !== false, now);
     this.players.set(message.token, player);
     peer.player = player;
@@ -153,6 +152,7 @@ export class Room {
       player.socket = undefined;
       player.keys = 0;
       player.jumpQueued = false;
+      player.attackQueued = false;
       player.disconnectedAt = Date.now();
       this.broadcast({ t: "left", slot: player.slot });
     }
@@ -169,7 +169,7 @@ export class Room {
       if (!player.socket && now - player.disconnectedAt > GRACE) this.players.delete(token);
     }
     const players = this.active();
-    for (const player of players) movePlayer(player, players, now, dt);
+    stepPlayers(players, now, dt);
     if (players.length && now - this.lastSnapshot >= 95) this.snapshot();
     if (!this.peers.size && !this.players.size) {
       clearInterval(this.timer);
