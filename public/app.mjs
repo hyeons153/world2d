@@ -1,6 +1,6 @@
-import { characters, drawCharacter, readSprite } from "./characters.mjs";
+import { characters, drawCharacter, readSprite, RENDER_SCALE } from "./characters.mjs";
 import { Connection, roomAvailable } from "./connection.mjs";
-import { movePlayer, setAutoMove } from "./movement.mjs";
+import { queueInput, setAutoMove, stepPlayers } from "./movement.mjs";
 import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, FLOOR, HEIGHT, KEY, nickname, PIXELS, POSE, validSprite, WIDTH } from "./protocol.mjs";
 import { drawScene, previewPlayers } from "./scene.mjs";
 
@@ -97,7 +97,7 @@ function renderCharacters() {
       button.type = "button";
       button.className = "character";
       const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = PIXELS;
+      canvas.width = canvas.height = PIXELS * RENDER_SCALE;
       canvas.setAttribute("aria-hidden", "true");
       button.append(canvas, document.createTextNode(details.name));
       if (id === "custom") {
@@ -123,6 +123,7 @@ function renderCharacters() {
     }
     button.lastChild.textContent = details.name;
     const ctx = button.firstChild.getContext("2d");
+    ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
     ctx.clearRect(0, 0, PIXELS, PIXELS);
     ctx.imageSmoothingEnabled = false;
     drawCharacter(ctx, id, sprite, PIXELS / 2, PIXELS, POSE.idle, 1, 0);
@@ -234,6 +235,7 @@ function setPlaying(next) {
   autoMoveButton.hidden = !next;
   pipButton.hidden = !next || !supportsPip;
   if (next) {
+    scene.focus({ preventScroll: true });
     window.scrollTo(0, 0);
   } else {
     localPlayer = undefined;
@@ -297,6 +299,7 @@ form.addEventListener("submit", async (event) => {
         ownSlot = slot;
         localPlayer.slot = slot;
         localPlayer.jumpQueued = false;
+        localPlayer.attackQueued = false;
         players.clear();
         connection.setAutoMove(autoMove);
         if (sent) connection.input(sent);
@@ -375,7 +378,7 @@ function paint() {
       if (player.point) visible.push({ ...player, ...player.point, ...interpolate(player, now) });
     }
     if (!players.get(ownSlot)?.point) {
-      movePlayer(localPlayer, [], now, dt);
+      stepPlayers([localPlayer], now, dt);
       visible.push(localPlayer);
     }
   } else {
@@ -398,8 +401,9 @@ function movePaint() {
 movePaint();
 
 const controls = {
-  ArrowLeft: KEY.left, KeyA: KEY.left, ArrowUp: KEY.jump, KeyW: KEY.jump,
-  ArrowRight: KEY.right, KeyD: KEY.right, Space: KEY.jump,
+  ArrowLeft: KEY.left, ArrowRight: KEY.right,
+  KeyA: KEY.jump, Space: KEY.jump,
+  KeyD: KEY.attack, ControlLeft: KEY.attack, ControlRight: KEY.attack,
 };
 const pressed = new Map();
 const touches = new Map();
@@ -411,16 +415,19 @@ function submitInput() {
   for (const touch of touches.values()) mask |= touch.key;
   if (mask === sent) return;
   if (localPlayer) {
-    localPlayer.keys = mask;
+    if (players.get(ownSlot)?.point) localPlayer.keys = mask;
+    else queueInput(localPlayer, mask);
     if (!mask) localPlayer.nextAction = performance.now();
-    if (!players.get(ownSlot)?.point && (mask & KEY.jump) && !(sent & KEY.jump)) localPlayer.jumpQueued = true;
   }
   sent = mask;
   connection?.input(mask);
 }
 
 function resetInput() {
-  if (localPlayer) localPlayer.jumpQueued = false;
+  if (localPlayer) {
+    localPlayer.jumpQueued = false;
+    localPlayer.attackQueued = false;
+  }
   pressed.clear();
   for (const { button } of touches.values()) delete button.dataset.held;
   touches.clear();
@@ -439,7 +446,7 @@ function bindKeys(host) {
     }
     if (target?.matches?.("input, textarea, [contenteditable], select") ||
         (target?.matches?.("button, a") && event.code === "Space")) return;
-    if (event.altKey || event.ctrlKey || event.metaKey) return;
+    if (event.altKey || event.metaKey || (event.ctrlKey && event.code === "KeyD")) return;
     event.preventDefault();
     if (event.type === "keydown" && !event.repeat) pressed.set(event.code, key);
     submitInput();
@@ -514,8 +521,8 @@ pipButton.addEventListener("click", async () => {
     style.href = new URL("./pip.css", location.href).href;
     host.document.head.append(style);
     pipCanvas = host.document.createElement("canvas");
-    pipCanvas.width = WIDTH;
-    pipCanvas.height = HEIGHT;
+    pipCanvas.width = WIDTH * RENDER_SCALE;
+    pipCanvas.height = HEIGHT * RENDER_SCALE;
     pipCanvas.setAttribute("aria-label", "픽셀 공터");
     host.document.body.append(pipCanvas);
     stopPipKeys = bindKeys(host);
