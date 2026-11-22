@@ -56,6 +56,8 @@ test("an attack reaches players in front and both clients see the hit and knockb
   assert.ok(attacker.observe(attacker.player).effects & EFFECT.punch);
   assert.ok(attacker.observe(target.player).effects & EFFECT.hit);
   assert.ok(target.observe(target.player).effects & EFFECT.hit);
+  assert.deepEqual(target.roster.find(({ t }) => t === "impact"),
+    { t: "impact", slot: target.player.slot, side: -1 });
   assert.ok(hitX > 174 && target.player.x > hitX);
   assert.equal(behind.player.x, 129);
   assert.equal(behind.player.effects, 0);
@@ -80,6 +82,19 @@ test("a punch that misses animates the arm without impact", (t) => {
   assert.equal(behind.player.effects, 0);
   assert.equal(tooFar.player.effects, 0);
   assert.equal(tooFar.player.x, 191);
+  assert.ok(!attacker.roster.some(({ t }) => t === "impact"));
+});
+
+test("a strike approaching from the right reports impact on the right side", (t) => {
+  const { enter, step } = setup(t);
+  const attacker = enter(175);
+  const target = enter(150);
+  attacker.player.facing = -1;
+  target.player.facing = -1;
+  attacker.input(KEY.attack);
+  step(3);
+  assert.deepEqual(target.roster.find(({ t }) => t === "impact"),
+    { t: "impact", slot: target.player.slot, side: 1 });
 });
 
 test("a descending jump squashes the player below and bounces exactly once", (t) => {
