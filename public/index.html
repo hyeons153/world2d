@@ -16,6 +16,7 @@
       <div class="container header-inner">
         <span class="brand"><img src="./sprout.svg" alt="" width="22" height="22">픽셀 공터</span>
         <div class="header-controls">
+          <button type="button" class="back-button" id="back-to-entry" aria-label="캐릭터 선택으로 돌아가기" hidden>← <span>캐릭터 선택</span></button>
           <select class="background-select" id="background-select" aria-label="맵 배경">
             <option value="original">기존 배경</option>
             <option value="white">화이트</option>
@@ -54,10 +55,10 @@
           <div class="upload">
             <button class="upload-button" id="choose-file" type="button">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M5 15v4a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-4"></path></svg>
-              내 PNG 등록
+              내 PNG·GIF 등록
             </button>
-            <input id="file" type="file" accept=".png,image/png" hidden>
-            <label class="sheet-toggle" title="대기, 걷기 1, 걷기 2, 점프 순서로 정사각형 4칸을 가로로 배열하세요."><input id="sprite-sheet" type="checkbox"> 4컷 스프라이트</label>
+            <input id="file" type="file" accept=".png,.gif,image/png,image/gif" hidden>
+            <label class="sheet-toggle" title="PNG 전용. 대기, 걷기 1, 걷기 2, 점프 순서로 정사각형 4칸을 가로로 배열하세요."><input id="sprite-sheet" type="checkbox"> PNG 4컷</label>
           </div>
           <p id="entry-message" class="message" role="status" hidden></p>
           <button id="join" class="join" type="submit">입장하기</button>
