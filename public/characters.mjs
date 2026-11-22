@@ -1,5 +1,5 @@
 import { MASCOT_ATLAS_URL } from "./mascot-atlas.mjs";
-import { builtinCharacter, DEFAULT_CHARACTER, PIXELS, POSE } from "./protocol.mjs";
+import { builtinCharacter, DEFAULT_CHARACTER, expandGifPixels, PIXELS, POSE } from "./protocol.mjs";
 
 export const characters = {
   chiikawa: { name: "치이카와", tile: 0 },
@@ -23,13 +23,25 @@ const customSprites = new WeakMap();
 function getCustom(sprite) {
   if (customSprites.has(sprite)) return customSprites.get(sprite);
   const canvas = document.createElement("canvas");
-  canvas.width = PIXELS * sprite.frames;
+  const animation = sprite.animation;
+  canvas.width = PIXELS * (animation?.delays.length ?? sprite.frames);
   canvas.height = PIXELS;
   const ctx = canvas.getContext("2d");
-  const data = Uint8ClampedArray.from(atob(sprite.pixels), (byte) => byte.charCodeAt(0));
+  const data = animation
+    ? expandGifPixels(Uint8Array.from(atob(animation.pixels), (byte) => byte.charCodeAt(0)))
+    : Uint8ClampedArray.from(atob(sprite.pixels), (byte) => byte.charCodeAt(0));
   ctx.putImageData(new ImageData(data, canvas.width, canvas.height), 0, 0);
   customSprites.set(sprite, canvas);
   return canvas;
+}
+
+function gifFrame(delays, time) {
+  let remaining = time % delays.reduce((total, delay) => total + delay, 0);
+  for (let frame = 0; frame < delays.length; frame++) {
+    if (remaining < delays[frame]) return frame;
+    remaining -= delays[frame];
+  }
+  return 0;
 }
 
 export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, phase = 0) {
@@ -39,7 +51,9 @@ export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, 
   ctx.translate(Math.round(x), Math.round(y));
   ctx.scale(facing, 1);
   if (character === "custom" && sprite) {
-    const frame = sprite.frames === 1 ? 0 : pose === POSE.jump ? 3 : moving ? 1 + step : 0;
+    const frame = sprite.animation
+      ? gifFrame(sprite.animation.delays, time)
+      : sprite.frames === 1 ? 0 : pose === POSE.jump ? 3 : moving ? 1 + step : 0;
     const source = getCustom(sprite);
     const height = pose === POSE.sit ? 20 : 28;
     const bob = moving && sprite.frames === 1 ? step : 0;
@@ -84,23 +98,30 @@ function drawBuiltin(ctx, id, step, pose) {
   }
 }
 
-export async function readPng(file, frames) {
-  if (!file || ![1, 4].includes(frames)) throw new Error("PNG 파일을 선택해 주세요.");
-  if (file.size < 33 || file.size > 512 * 1024) throw new Error("PNG는 512KB 이하로 선택해 주세요.");
+export async function readSprite(file, frames, signal) {
+  if (!file || file.size < 13) throw new Error("PNG 또는 GIF 파일을 선택해 주세요.");
+  if (file.size >= 10_000_000) throw new Error("PNG와 GIF는 10MB 미만으로 올려 주세요.");
   const header = new DataView(await file.slice(0, 33).arrayBuffer());
+  signal?.throwIfAborted();
+  if (header.getUint32(0) === 0x47494638) return readGif(file, signal);
+
+  if (header.byteLength < 33 || ![1, 4].includes(frames)) throw new Error("PNG 또는 GIF 형식의 이미지가 필요해요.");
   if (header.getUint32(0) !== 0x89504e47 || header.getUint32(4) !== 0x0d0a1a0a ||
       header.getUint32(8) !== 13 || header.getUint32(12) !== 0x49484452) {
-    throw new Error("PNG 형식의 이미지가 필요해요.");
+    throw new Error("PNG 또는 GIF 형식의 이미지가 필요해요.");
   }
   const width = header.getUint32(16);
   const height = header.getUint32(20);
-  if (!width || !height || width > 512 || height > 512) throw new Error("이미지는 최대 512×512픽셀까지 등록할 수 있어요.");
+  if (!width || !height || width > 8192 || height > 8192 || width * height > 16_777_216) {
+    throw new Error("PNG 해상도를 줄여 주세요. 최대 약 1,677만 픽셀이에요.");
+  }
   if (frames === 4 && width !== height * 4) throw new Error("스프라이트는 정사각형 4칸을 가로로 붙인 PNG여야 해요.");
   const url = URL.createObjectURL(file);
   const image = new Image();
   try {
     image.src = url;
     await image.decode();
+    signal?.throwIfAborted();
     if (image.naturalWidth !== width || image.naturalHeight !== height) throw new Error("이미지 크기가 올바르지 않아요.");
     const canvas = document.createElement("canvas");
     canvas.width = PIXELS * frames;
@@ -121,4 +142,28 @@ export async function readPng(file, frames) {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+async function readGif(file, signal) {
+  const data = await file.arrayBuffer();
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./gif-worker.mjs", import.meta.url), { type: "module" });
+    function finish(error, sprite) {
+      clearTimeout(timeout);
+      signal?.removeEventListener("abort", abort);
+      worker.terminate();
+      if (error) reject(error);
+      else resolve(sprite);
+    }
+    const abort = () => finish(signal.reason);
+    const timeout = setTimeout(() => finish(new Error("GIF 변환 시간이 초과됐어요. 더 짧은 GIF를 선택해 주세요.")), 15_000);
+    signal?.addEventListener("abort", abort, { once: true });
+    worker.addEventListener("message", ({ data: result }) => {
+      if (result.error) finish(new Error(result.error));
+      else finish(undefined, result.sprite);
+    }, { once: true });
+    worker.addEventListener("error", () => finish(new Error("GIF 파일을 읽을 수 없어요.")), { once: true });
+    worker.postMessage(data, [data]);
+  });
 }
