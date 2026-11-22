@@ -90,6 +90,11 @@ export class Connection {
     if (this.joined) this.send({ t: "input", keys });
   }
 
+  setAutoMove(enabled) {
+    this.profile.autoMove = enabled;
+    if (this.joined) this.send({ t: "auto-move", enabled });
+  }
+
   stop() {
     this.active = false;
     this.joined = false;
