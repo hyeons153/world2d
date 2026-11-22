@@ -1,4 +1,4 @@
-import { advancePlayer, movementDirection, WALK_SPEED } from "../public/movement.mjs";
+import { movePlayer, setAutoMove } from "../public/movement.mjs";
 import { builtinCharacter, encodeSnapshot, FLOOR, INPUT_LEASE, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite } from "../public/protocol.mjs";
 
 const PULSE = 50;
@@ -52,12 +52,14 @@ export class Room {
     peer.lastSeen = now;
     if (message.t === "ping") {
       this.send(socket, { t: "pong" });
+    } else if (message.t === "auto-move" && typeof message.enabled === "boolean") {
+      setAutoMove(peer.player, message.enabled, now);
     } else if (message.t === "input" && Number.isInteger(message.keys) && message.keys >= 0 && message.keys <= 7) {
       const player = peer.player;
       if (message.keys & KEY.jump && !(player.keys & KEY.jump)) player.jumpQueued = true;
       player.keys = message.keys;
       player.inputUntil = now + INPUT_LEASE;
-      // A blur or key release immediately returns control to the room.
+      // An idle player can resume automatic movement on the next tick.
       if (!player.keys) player.nextAction = now;
     }
   }
@@ -84,11 +86,13 @@ export class Room {
       : Array.from({ length: LIMIT }, (_, index) => index).find((index) => !used.has(index));
     player ??= {
       slot, x: SPAWN[slot % SPAWN.length] + between(-9, 9), y: FLOOR, vy: 0,
-      facing: slot % 2 ? -1 : 1, pose: POSE.idle, nextAction: now + between(250, 950)
+      facing: slot % 2 ? -1 : 1, pose: POSE.idle, nextAction: now + between(250, 950),
+      autoMove: message.autoMove !== false,
     };
     const sprite = custom ? { frames: message.sprite.frames, pixels: message.sprite.pixels } : undefined;
     const announce = !oldSocket || player.name !== name || player.character !== character || player.sprite?.pixels !== sprite?.pixels;
     Object.assign(player, { slot, name, character, sprite, socket, keys: 0, inputUntil: 0, jumpQueued: false });
+    setAutoMove(player, message.autoMove !== false, now);
     this.players.set(message.token, player);
     peer.player = player;
     if (oldSocket) this.close(oldSocket, 4001, "replaced");
@@ -157,69 +161,11 @@ export class Room {
       if (!player.socket && now - player.disconnectedAt > GRACE) this.players.delete(token);
     }
     const players = this.active();
-    for (const player of players) this.move(player, players, now, dt);
+    for (const player of players) movePlayer(player, players, now, dt);
     if (players.length && now - this.lastSnapshot >= 95) this.snapshot();
     if (!this.peers.size && !this.players.size) {
       clearInterval(this.timer);
       this.timer = undefined;
     }
-  }
-
-  move(player, players, now, dt) {
-    if (now > player.inputUntil && player.keys) {
-      player.keys = 0;
-      player.nextAction = now;
-    }
-    let direction = 0;
-    let speed = WALK_SPEED;
-    let pose = POSE.idle;
-    let jump = player.jumpQueued;
-    player.jumpQueued = false;
-    if (player.keys) {
-      direction = movementDirection(player.keys);
-      if (direction) pose = POSE.walk;
-      player.nextAction = now;
-    } else {
-      const grounded = player.y === FLOOR;
-      if (now >= player.nextAction && grounded) jump = this.chooseAction(player, players, now) || jump;
-      pose = player.autoPose ?? POSE.idle;
-      if (pose === POSE.walk || pose === POSE.run) {
-        const delta = player.target - player.x;
-        direction = Math.abs(delta) > 2 ? Math.sign(delta) : 0;
-        speed = pose === POSE.run ? 57 : 26;
-        if (!direction) {
-          player.autoPose = POSE.idle;
-          pose = POSE.idle;
-        }
-      }
-    }
-    advancePlayer(player, { direction, speed, jump, pose }, dt);
-  }
-
-  chooseAction(player, players, now) {
-    const roll = Math.random();
-    const neighbours = players.filter((other) => other !== player && Math.abs(other.x - player.x) < 35);
-    if (roll < 0.57) {
-      const others = players.filter((other) => other !== player);
-      const other = others[Math.floor(Math.random() * others.length)];
-      player.target = other && roll < 0.29 ? other.x + between(-14, 14) : player.x + between(-76, 76);
-      player.autoPose = roll < 0.20 ? POSE.run : POSE.walk;
-      player.nextAction = now + between(750, 2400);
-    } else if (roll < 0.70) {
-      player.autoPose = POSE.idle;
-      player.nextAction = now + between(600, 1150);
-      return true;
-    } else if (roll < 0.86) {
-      player.autoPose = POSE.sit;
-      player.nextAction = now + between(700, 2300);
-    } else if (neighbours.length) {
-      player.autoPose = POSE.wave;
-      player.facing = Math.sign(neighbours[0].x - player.x) || player.facing;
-      player.nextAction = now + between(500, 1100);
-    } else {
-      player.autoPose = POSE.idle;
-      player.nextAction = now + between(350, 850);
-    }
-    return false;
   }
 }
