@@ -57,6 +57,8 @@ export class Connection {
         this.events.roster(message);
       } else if (this.joined && message.t === "emote" && validEmote(message.emote)) {
         this.events.emote(message.slot, message.emote);
+      } else if (this.joined && message.t === "impact" && (message.side === -1 || message.side === 1)) {
+        this.events.impact(message.slot, message.side);
       }
     });
     socket.addEventListener("close", (event) => {
