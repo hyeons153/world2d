@@ -1,6 +1,6 @@
 import { characters, drawCharacter, readPng } from "./characters.mjs";
 import { Connection, roomAvailable } from "./connection.mjs";
-import { advancePlayer, movementDirection, WALK_SPEED } from "./movement.mjs";
+import { movePlayer, setAutoMove } from "./movement.mjs";
 import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, FLOOR, HEIGHT, KEY, nickname, POSE, validSprite, WIDTH } from "./protocol.mjs";
 import { drawScene, previewPlayers } from "./scene.mjs";
 
@@ -8,7 +8,10 @@ const $ = (id) => document.getElementById(id);
 const scene = $("scene");
 const form = $("entry");
 const pipButton = $("pip");
+const autoMoveButton = $("auto-move");
+const backgroundSelect = $("background-select");
 const savedKey = "pixel-clearing.profile.v1";
+const settingsKey = "pixel-clearing.settings.v1";
 const identityKey = "pixel-clearing.identity.v1";
 const supportsTouch = matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
 const supportsPip = typeof window.documentPictureInPicture?.requestWindow === "function";
@@ -16,6 +19,11 @@ const roomUnavailable = "실시간 공터 서버가 아직 연결되지 않았�
 
 let saved;
 try { saved = JSON.parse(localStorage.getItem(savedKey)); } catch {}
+let settings;
+try { settings = JSON.parse(localStorage.getItem(settingsKey)); } catch {}
+let autoMove = settings?.autoMove !== false;
+backgroundSelect.value = settings?.background ?? "original";
+if (!backgroundSelect.value) backgroundSelect.value = "original";
 $("nickname").value = nickname(saved?.name);
 let sprite = validSprite(saved?.sprite) ? saved.sprite : undefined;
 let selected = sprite && saved?.character === "custom" ? "custom" : builtinCharacter(saved?.character) ?? DEFAULT_CHARACTER;
@@ -35,6 +43,35 @@ let stopPipKeys;
 let lastPaint = 0;
 let scheduled;
 const players = new Map();
+
+function saveSettings() {
+  try { localStorage.setItem(settingsKey, JSON.stringify({ autoMove, background: backgroundSelect.value })); } catch {}
+}
+
+function showAutoMove() {
+  autoMoveButton.setAttribute("aria-pressed", String(autoMove));
+  autoMoveButton.lastElementChild.textContent = autoMove ? "ON" : "OFF";
+}
+
+function showBackground() {
+  const background = backgroundSelect.value;
+  document.body.dataset.background = background;
+  if (pipWindow && !pipWindow.closed) pipWindow.document.documentElement.dataset.background = background;
+}
+
+autoMoveButton.addEventListener("click", () => {
+  autoMove = !autoMove;
+  if (localPlayer) setAutoMove(localPlayer, autoMove, performance.now());
+  connection?.setAutoMove(autoMove);
+  showAutoMove();
+  saveSettings();
+});
+backgroundSelect.addEventListener("change", () => {
+  showBackground();
+  saveSettings();
+});
+showAutoMove();
+showBackground();
 
 function message(id, value) {
   const target = $(id);
@@ -140,6 +177,7 @@ function setPlaying(next) {
   document.body.toggleAttribute("data-playing", next);
   form.hidden = next;
   $("touch").hidden = !next || !supportsTouch;
+  autoMoveButton.hidden = !next;
   pipButton.hidden = !next || !supportsPip;
   if (next) {
     window.scrollTo(0, 0);
@@ -169,19 +207,23 @@ form.addEventListener("submit", async (event) => {
     message("entry-message", "");
     message("play-message", "");
     const profile = { name, character: selected, sprite: selected === "custom" ? sprite : undefined };
-    localPlayer = { ...profile, slot: -1, x: WIDTH / 2, y: FLOOR, vy: 0, facing: 1, pose: POSE.idle };
+    localPlayer = {
+      ...profile, slot: -1, x: WIDTH / 2, y: FLOOR, vy: 0, facing: 1, pose: POSE.idle,
+      keys: 0, inputUntil: Infinity, autoMove, nextAction: performance.now() + 550,
+    };
     setPlaying(true);
     showConnection(roomAvailable ? "connecting" : "offline");
     if (!roomAvailable) return;
 
     const token = await browserIdentity();
-    connection = new Connection({ token, ...profile }, {
+    connection = new Connection({ token, ...profile, autoMove }, {
       state: showConnection,
       welcome(slot) {
         ownSlot = slot;
         localPlayer.slot = slot;
         localPlayer.jumpQueued = false;
         players.clear();
+        connection.setAutoMove(autoMove);
         if (sent) connection.input(sent);
       },
       roster(entry) {
@@ -229,7 +271,10 @@ form.addEventListener("submit", async (event) => {
 function showConnection(next) {
   if (state === "online" && next !== "online") {
     const player = players.get(ownSlot);
-    if (player?.point) Object.assign(localPlayer, player.point, interpolate(player, performance.now()), { vy: 0 });
+    if (player?.point) {
+      const now = performance.now();
+      Object.assign(localPlayer, player.point, interpolate(player, now), { vy: 0, autoPose: POSE.idle, nextAction: now + 550 });
+    }
     players.clear();
     resetInput();
   }
@@ -257,18 +302,15 @@ function paint() {
       if (player.point) visible.push({ ...player, ...player.point, ...interpolate(player, now) });
     }
     if (!players.get(ownSlot)?.point) {
-      const direction = movementDirection(sent);
-      advancePlayer(localPlayer, {
-        direction, speed: WALK_SPEED, jump: localPlayer.jumpQueued, pose: direction ? POSE.walk : POSE.idle,
-      }, dt);
-      localPlayer.jumpQueued = false;
+      movePlayer(localPlayer, [], now, dt);
       visible.push(localPlayer);
     }
   } else {
     visible = previewPlayers(now);
   }
-  if (!document.hidden || !pipCanvas) drawScene(scene, visible, now, playing ? ownSlot : -1);
-  if (pipCanvas) drawScene(pipCanvas, visible, now, ownSlot);
+  const background = backgroundSelect.value;
+  if (!document.hidden || !pipCanvas) drawScene(scene, visible, now, playing ? ownSlot : -1, background);
+  if (pipCanvas) drawScene(pipCanvas, visible, now, ownSlot, background);
 }
 
 function queuePaint() {
@@ -296,8 +338,10 @@ function submitInput() {
   for (const key of pressed.values()) mask |= key;
   for (const touch of touches.values()) mask |= touch.key;
   if (mask === sent) return;
-  if (localPlayer && !players.get(ownSlot)?.point && (mask & KEY.jump) && !(sent & KEY.jump)) {
-    localPlayer.jumpQueued = true;
+  if (localPlayer) {
+    localPlayer.keys = mask;
+    if (!mask) localPlayer.nextAction = performance.now();
+    if (!players.get(ownSlot)?.point && (mask & KEY.jump) && !(sent & KEY.jump)) localPlayer.jumpQueued = true;
   }
   sent = mask;
   connection?.input(mask);
@@ -391,6 +435,7 @@ pipButton.addEventListener("click", async () => {
       return;
     }
     host.document.title = "픽셀 공터";
+    showBackground();
     const style = host.document.createElement("link");
     style.rel = "stylesheet";
     style.href = new URL("./pip.css", location.href).href;
