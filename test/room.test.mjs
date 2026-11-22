@@ -4,6 +4,8 @@ import { once } from "node:events";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { createPlayground } from "../server/local.mjs";
+import { Room } from "../server/room.mjs";
+import { movePlayer } from "../public/movement.mjs";
 import { decodeSnapshot, FLOOR, KEY, LIMIT, PIXELS, POSE } from "../public/protocol.mjs";
 
 async function waitFor(predicate, description, timeout = 4_000) {
@@ -15,6 +17,55 @@ async function waitFor(predicate, description, timeout = 4_000) {
   }
   assert.fail(description);
 }
+
+test("automatic movement can be disabled per player without disabling manual controls", (t) => {
+  const room = new Room();
+  t.after(() => clearInterval(room.timer));
+  const firstToken = randomBytes(16).toString("hex");
+  const secondToken = randomBytes(16).toString("hex");
+  const enter = (token, autoMove) => {
+    const peer = { send() {}, close() {} };
+    room.accept(peer);
+    room.receive(peer, JSON.stringify({ t: "join", token, name: "친구", character: "anoko", autoMove }));
+    return peer;
+  };
+  const first = enter(firstToken, true);
+  enter(secondToken);
+  const player = room.players.get(firstToken);
+  const other = room.players.get(secondToken);
+  const tick = () => movePlayer(player, room.active(), Date.now(), 0.05);
+  const send = (message) => room.receive(first, JSON.stringify(message));
+
+  Object.assign(player, { autoPose: POSE.walk, target: player.x + 30, nextAction: Infinity });
+  const before = player.x;
+  tick();
+  assert.ok(player.x > before);
+
+  send({ t: "auto-move", enabled: false });
+  const stopped = player.x;
+  tick();
+  assert.equal(player.x, stopped);
+  assert.equal(player.pose, POSE.idle);
+  assert.equal(other.autoMove, true);
+
+  send({ t: "input", keys: KEY.right | KEY.jump });
+  tick();
+  assert.ok(player.x > stopped);
+  assert.ok(player.y < FLOOR);
+  send({ t: "input", keys: 0 });
+  const released = player.x;
+  for (let step = 0; step < 20; step++) tick();
+  assert.equal(player.x, released);
+  assert.equal(player.y, FLOOR);
+
+  send({ t: "auto-move", enabled: true });
+  assert.equal(player.autoMove, true);
+  const reconnected = enter(firstToken, false);
+  assert.equal(player.socket, reconnected);
+  assert.equal(player.autoMove, false);
+  tick();
+  assert.equal(player.x, released);
+});
 
 test("one WebSocket room shares characters, motion and reconnects with a 20-player cap", { timeout: 13_000 }, async (t) => {
   const { server, room } = createPlayground();
