@@ -15,6 +15,12 @@ export const EFFECT = { attack: 16, hit: 32, squash: 64, punch: 128 };
 export const EFFECT_MASK = EFFECT.attack | EFFECT.hit | EFFECT.squash | EFFECT.punch;
 export const KEEPALIVE = 10_000;
 export const INPUT_LEASE = 3_000;
+export const EMOTE_DURATION = 1_650;
+export const EMOTE_COOLDOWN = 400;
+
+export function validEmote(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 4;
+}
 
 const legacyCharacters = {
   sprout: DEFAULT_CHARACTER,
