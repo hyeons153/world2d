@@ -1,5 +1,5 @@
 import { queueInput, setAutoMove, stepPlayers } from "../public/movement.mjs";
-import { builtinCharacter, encodeSnapshot, FLOOR, INPUT_LEASE, INPUT_MASK, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validSprite } from "../public/protocol.mjs";
+import { builtinCharacter, EMOTE_COOLDOWN, encodeSnapshot, FLOOR, INPUT_LEASE, INPUT_MASK, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validEmote, validSprite } from "../public/protocol.mjs";
 
 const PULSE = 50;
 const EXPIRE = 38_000;
@@ -65,6 +65,9 @@ export class Room {
       this.send(socket, { t: "pong" });
     } else if (message.t === "auto-move" && typeof message.enabled === "boolean") {
       setAutoMove(peer.player, message.enabled, now);
+    } else if (message.t === "emote" && validEmote(message.emote) && now >= (peer.player.emoteReadyAt ?? 0)) {
+      peer.player.emoteReadyAt = now + EMOTE_COOLDOWN;
+      this.broadcast({ t: "emote", slot: peer.player.slot, emote: message.emote }, socket);
     } else if (message.t === "input" && Number.isInteger(message.keys) && message.keys >= 0 && message.keys <= INPUT_MASK) {
       const player = peer.player;
       queueInput(player, message.keys);
