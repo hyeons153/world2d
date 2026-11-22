@@ -1,5 +1,5 @@
 import { MASCOT_ATLAS_URL } from "./mascot-atlas.mjs";
-import { builtinCharacter, DEFAULT_CHARACTER, expandGifPixels, PIXELS, POSE } from "./protocol.mjs";
+import { builtinCharacter, DEFAULT_CHARACTER, EFFECT, expandGifPixels, PIXELS, POSE } from "./protocol.mjs";
 
 export const characters = {
   chiikawa: { name: "치이카와", tile: 0 },
@@ -21,6 +21,19 @@ if (atlas) {
 }
 
 const customSprites = new WeakMap();
+
+// The shoulder sits at the edge of each sprite. The arm is drawn on top at native pixel scale.
+const punchArms = {
+  chiikawa: [8, -12, "#f9f5ed"],
+  usagi: [7, -12, "#fbefd0"],
+  hachiware: [8, -13, "#f9f5ed"],
+  rakko: [9, -13, "#fbefd0"],
+  shisa: [9, -12, "#fbefd0"],
+  kani: [9, -12, "#ffe6d6"],
+  dekatsuyo: [11, -13, "#fbed99"],
+  anoko: [9, -12, "#f9f5ed"],
+  custom: [10, -13, "#f9f5ed"],
+};
 
 function getCustom(sprite) {
   if (customSprites.has(sprite)) return customSprites.get(sprite);
@@ -46,13 +59,15 @@ function gifFrame(delays, time) {
   return 0;
 }
 
-export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, phase = 0, squashed = false) {
+export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, phase = 0, effects = 0) {
   const moving = pose === POSE.walk || pose === POSE.run;
   const step = Math.floor(time / (pose === POSE.run ? 105 : 155) + phase) & 1;
+  const squashed = Boolean(effects & EFFECT.squash);
+  const id = character === "custom" && sprite ? "custom" : builtinCharacter(character) ?? DEFAULT_CHARACTER;
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
   ctx.scale(facing * (squashed ? 1.18 : 1), squashed ? 0.58 : 1);
-  if (character === "custom" && sprite) {
+  if (id === "custom") {
     const frame = sprite.animation
       ? gifFrame(sprite.animation.delays, time)
       : sprite.frames === 1 ? 0 : pose === POSE.jump ? 3 : moving ? 1 + step : 0;
@@ -61,9 +76,12 @@ export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, 
     const bob = moving && sprite.frames === 1 ? step : 0;
     ctx.drawImage(source, frame * PIXELS, 0, PIXELS, PIXELS, -14, -height - bob, 28, height);
   } else {
-    drawBuiltin(ctx, builtinCharacter(character) ?? DEFAULT_CHARACTER, moving ? step : 0, pose);
+    drawBuiltin(ctx, id, moving ? step : 0, pose);
   }
-  if (pose === POSE.wave) {
+  if ((effects & EFFECT.attack) && !squashed) {
+    const armBob = moving && (id !== "custom" || sprite.frames === 1) ? step : 0;
+    drawPunchArm(ctx, id, pose, armBob, Boolean(effects & EFFECT.punch));
+  } else if (pose === POSE.wave) {
     const bob = Math.floor(time / 190) % 2;
     ctx.fillStyle = "#ffda9e";
     ctx.fillRect(12, -22 - bob, 2, 2);
@@ -71,6 +89,20 @@ export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, 
     ctx.fillRect(14, -25 - bob, 3, 1);
   }
   ctx.restore();
+}
+
+function drawPunchArm(ctx, id, pose, bob, extended) {
+  const [shoulderX, anchorY, fill] = punchArms[id];
+  const y = anchorY - bob + (pose === POSE.sit ? 2 : 0);
+  const fistX = extended ? 20 : shoulderX + 2;
+  const fistY = y - (extended ? 2 : 4);
+  ctx.fillStyle = "#24201f";
+  ctx.fillRect(shoulderX, y, fistX - shoulderX + 2, 4);
+  ctx.fillRect(fistX - 1, fistY, 5, 6);
+  ctx.fillRect(fistX, fistY - 1, 3, 8);
+  ctx.fillStyle = fill;
+  ctx.fillRect(shoulderX, y + 1, fistX - shoulderX + 1, 2);
+  ctx.fillRect(fistX, fistY, 3, 6);
 }
 
 function drawBuiltin(ctx, id, step, pose) {
