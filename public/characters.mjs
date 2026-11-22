@@ -13,6 +13,8 @@ export const characters = {
 };
 
 const atlas = typeof Image === "function" ? new Image() : undefined;
+export const RENDER_SCALE = 2;
+const ATLAS_PIXELS = PIXELS * RENDER_SCALE;
 if (atlas) {
   atlas.src = MASCOT_ATLAS_URL;
   await atlas.decode();
@@ -44,12 +46,12 @@ function gifFrame(delays, time) {
   return 0;
 }
 
-export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, phase = 0) {
+export function drawCharacter(ctx, character, sprite, x, y, pose, facing, time, phase = 0, squashed = false) {
   const moving = pose === POSE.walk || pose === POSE.run;
   const step = Math.floor(time / (pose === POSE.run ? 105 : 155) + phase) & 1;
   ctx.save();
   ctx.translate(Math.round(x), Math.round(y));
-  ctx.scale(facing, 1);
+  ctx.scale(facing * (squashed ? 1.18 : 1), squashed ? 0.58 : 1);
   if (character === "custom" && sprite) {
     const frame = sprite.animation
       ? gifFrame(sprite.animation.delays, time)
@@ -75,7 +77,7 @@ function drawBuiltin(ctx, id, step, pose) {
   if (!atlas) return;
   const { tile } = characters[id];
   const height = pose === POSE.sit ? 28 : pose === POSE.jump ? 31 : PIXELS;
-  ctx.drawImage(atlas, tile * PIXELS, 0, PIXELS, PIXELS, -PIXELS / 2, -height - step, PIXELS, height);
+  ctx.drawImage(atlas, tile * ATLAS_PIXELS, 0, ATLAS_PIXELS, ATLAS_PIXELS, -PIXELS / 2, -height - step, PIXELS, height);
 }
 
 export async function readSprite(file, frames, signal) {
