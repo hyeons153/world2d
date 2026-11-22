@@ -137,7 +137,7 @@ const impactColors = { x: "#b5662f", o: "#f09a48", "+": "#ffd18a" };
 
 function drawEffects(ctx, player, x, y) {
   if (player.effects & EFFECT.hit) {
-    const impactX = x + (player.impactSide ?? -player.facing) * 19;
+    const impactX = x + (player.impactSide ?? -player.facing) * 16;
     for (let row = 0; row < impactBurst.length; row++) {
       for (let column = 0; column < impactBurst[row].length; column++) {
         const color = impactColors[impactBurst[row][column]];
@@ -191,12 +191,13 @@ export function drawScene(canvas, players, now, ownSlot = -1, background = "orig
     const emote = validEmote(player.emote) ? player.emote : undefined;
     const extent = emote ? Math.max(width, EMOTE_SIZE) : width;
     const x = Math.min(WIDTH - extent / 2 - 2, Math.max(extent / 2 + 2, Math.round(player.x)));
-    const row = Math.round(player.y) - 38;
+    const feet = Math.round(player.y);
+    const nameTop = feet + 4;
     const mine = player.slot === ownSlot;
-    pixels(ctx, mine ? "#eef1ad" : "#344d49", x - width / 2, row - 5, width, 11);
+    pixels(ctx, mine ? "#eef1ad" : "#344d49", x - width / 2, nameTop, width, 11);
     ctx.fillStyle = mine ? "#324437" : "#fff3d5";
-    ctx.fillText(player.name, x, row + 0.5, width - 5);
-    if (emote) drawEmote(ctx, emote, Math.round(x) - Math.floor(EMOTE_SIZE / 2), row - EMOTE_SIZE - 7);
+    ctx.fillText(player.name, x, nameTop + 5.5, width - 5);
+    if (emote) drawEmote(ctx, emote, Math.round(x) - Math.floor(EMOTE_SIZE / 2), feet - EMOTE_SIZE - 45);
   }
 }
 
