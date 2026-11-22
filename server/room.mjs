@@ -198,7 +198,7 @@ export class Room {
         npc.keys = now >= recoverAt && Math.abs(distance) > 3 ? (distance < 0 ? KEY.left : KEY.right) : 0;
         players.push(npc);
       }
-      stepPlayers(players, now, dt);
+      for (const impact of stepPlayers(players, now, dt)) this.broadcast({ t: "impact", ...impact });
       if (now - this.lastSnapshot >= 95) this.snapshot();
     }
     if (!this.peers.size && !this.players.size) {
