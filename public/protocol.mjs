@@ -9,7 +9,10 @@ export const MAX_GIF_DELAY = 5000;
 export const DEFAULT_CHARACTER = "chiikawa";
 export const DEFAULTS = [DEFAULT_CHARACTER, "usagi", "hachiware", "rakko", "shisa", "kani", "dekatsuyo", "anoko"];
 export const POSE = { idle: 0, walk: 1, run: 2, jump: 3, sit: 4, wave: 5 };
-export const KEY = { left: 1, right: 2, jump: 4 };
+export const KEY = { left: 1, right: 2, jump: 4, attack: 8 };
+export const INPUT_MASK = KEY.left | KEY.right | KEY.jump | KEY.attack;
+export const EFFECT = { attack: 16, hit: 32, squash: 64 };
+export const EFFECT_MASK = EFFECT.attack | EFFECT.hit | EFFECT.squash;
 export const KEEPALIVE = 10_000;
 export const INPUT_LEASE = 3_000;
 
@@ -76,7 +79,7 @@ export function encodeSnapshot(players) {
     bytes[offset] = player.slot;
     view.setUint16(offset + 1, Math.round(player.x * 4), true);
     bytes[offset + 3] = Math.round(player.y);
-    bytes[offset + 4] = player.pose | (player.facing < 0 ? 8 : 0);
+    bytes[offset + 4] = player.pose | (player.facing < 0 ? 8 : 0) | (player.effects & EFFECT_MASK);
   });
   return bytes;
 }
@@ -93,6 +96,7 @@ export function decodeSnapshot(buffer) {
       y: view.getUint8(offset + 3),
       pose: flags & 7,
       facing: flags & 8 ? -1 : 1,
+      effects: flags & EFFECT_MASK,
     });
   }
   return players;
