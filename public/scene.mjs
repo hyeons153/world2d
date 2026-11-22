@@ -137,10 +137,11 @@ const impactColors = { x: "#b5662f", o: "#f09a48", "+": "#ffd18a" };
 
 function drawEffects(ctx, player, x, y) {
   if (player.effects & EFFECT.hit) {
+    const impactX = x + (player.impactSide ?? -player.facing) * 19;
     for (let row = 0; row < impactBurst.length; row++) {
       for (let column = 0; column < impactBurst[row].length; column++) {
         const color = impactColors[impactBurst[row][column]];
-        if (color) pixels(ctx, color, x + column - 6, y + row - 22, 1, 1);
+        if (color) pixels(ctx, color, impactX + column - 6, y + row - 18, 1, 1);
       }
     }
   }
