@@ -5,7 +5,7 @@ compatibility_date = "2026-07-01"
 [vars]
 # Only the production site may open a browser WebSocket to this Worker.
 ALLOWED_ORIGINS = "https://world2d.vercel.app"
-PRACTICE_NPC = "1"
+PRACTICE_NPC = "0"
 
 [[durable_objects.bindings]]
 name = "ROOM"
