@@ -4,6 +4,8 @@ export const FLOOR = 170;
 export const LIMIT = 20;
 export const PIXELS = 32;
 export const MAX_MESSAGE = 23_000;
+export const MAX_GIF_FRAMES = 12;
+export const MAX_GIF_DELAY = 5000;
 export const DEFAULT_CHARACTER = "chiikawa";
 export const DEFAULTS = [DEFAULT_CHARACTER, "usagi", "hachiware", "rakko", "shisa", "kani", "dekatsuyo", "anoko"];
 export const POSE = { idle: 0, walk: 1, run: 2, jump: 3, sit: 4, wave: 5 };
@@ -32,15 +34,38 @@ export function nickname(value) {
     : "";
 }
 
-export function validSprite(sprite) {
-  if (!sprite || ![1, 4].includes(sprite.frames) || typeof sprite.pixels !== "string") return false;
-  const bytes = PIXELS * PIXELS * 4 * sprite.frames;
-  if (sprite.pixels.length !== 4 * Math.ceil(bytes / 3) || !/^[A-Za-z0-9+/]+={0,2}$/.test(sprite.pixels)) return false;
+function validPixels(pixels, bytes) {
+  if (typeof pixels !== "string" || pixels.length !== 4 * Math.ceil(bytes / 3) || !/^[A-Za-z0-9+/]+={0,2}$/.test(pixels)) return false;
   try {
-    return atob(sprite.pixels).length === bytes;
+    return atob(pixels).length === bytes;
   } catch {
     return false;
   }
+}
+
+export function validSprite(sprite) {
+  if (!sprite || ![1, 4].includes(sprite.frames) || !validPixels(sprite.pixels, PIXELS * PIXELS * 4 * sprite.frames)) return false;
+  if (sprite.animation === undefined) return true;
+  const animation = sprite.animation;
+  if (sprite.frames !== 1 || !animation || !Array.isArray(animation.delays)) return false;
+  const count = animation.delays.length;
+  return count >= 2 && count <= MAX_GIF_FRAMES &&
+    animation.delays.every((delay) => Number.isInteger(delay) && delay >= 20 && delay <= MAX_GIF_DELAY) &&
+    validPixels(animation.pixels, PIXELS * PIXELS * count);
+}
+
+export function expandGifPixels(pixels) {
+  const rgba = new Uint8ClampedArray(pixels.length * 4);
+  for (let index = 0; index < pixels.length; index++) {
+    const color = pixels[index] - 1;
+    if (color < 0 || color > 251) continue;
+    const offset = index * 4;
+    rgba[offset] = Math.floor(color / 42) * 51;
+    rgba[offset + 1] = Math.round((Math.floor(color / 6) % 7) * 255 / 6);
+    rgba[offset + 2] = (color % 6) * 51;
+    rgba[offset + 3] = 255;
+  }
+  return rgba;
 }
 
 export function encodeSnapshot(players) {
