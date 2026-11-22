@@ -1,5 +1,5 @@
-import { characters, drawCharacter } from "./characters.mjs";
-import { WIDTH, HEIGHT, FLOOR, POSE } from "./protocol.mjs";
+import { characters, drawCharacter, RENDER_SCALE } from "./characters.mjs";
+import { EFFECT, WIDTH, HEIGHT, FLOOR, POSE } from "./protocol.mjs";
 
 function pixels(ctx, color, x, y, width, height) {
   ctx.fillStyle = color;
@@ -119,8 +119,36 @@ const motes = Array.from({ length: 22 }, (_, index) => ({
   phase: index * 2.9,
 }));
 
+function drawEffects(ctx, player, x, y) {
+  if (player.effects & EFFECT.attack) {
+    ctx.save();
+    ctx.translate(x + player.facing * 17, y - 13);
+    ctx.scale(player.facing, 1);
+    pixels(ctx, "#74433c", 4, -7, 9, 3);
+    pixels(ctx, "#74433c", 10, -4, 5, 6);
+    pixels(ctx, "#74433c", 5, 2, 8, 3);
+    pixels(ctx, "#fff0a7", 5, -6, 7, 1);
+    pixels(ctx, "#fff0a7", 11, -4, 3, 6);
+    pixels(ctx, "#fbb474", 7, 2, 5, 2);
+    ctx.restore();
+  }
+  if (player.effects & EFFECT.hit) {
+    pixels(ctx, "#985354", x - 3, y - 27, 6, 10);
+    pixels(ctx, "#985354", x - 7, y - 24, 14, 4);
+    pixels(ctx, "#fff6c6", x - 2, y - 26, 4, 8);
+    pixels(ctx, "#ffe295", x - 6, y - 23, 12, 2);
+  }
+  if (player.effects & EFFECT.squash) {
+    pixels(ctx, "#a17a63", x - 19, y - 5, 4, 2);
+    pixels(ctx, "#a17a63", x + 16, y - 5, 4, 2);
+    pixels(ctx, "#fff0a7", x - 22, y - 8, 3, 2);
+    pixels(ctx, "#fff0a7", x + 21, y - 8, 3, 2);
+  }
+}
+
 export function drawScene(canvas, players, now, ownSlot = -1, background = "original") {
   const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
   ctx.imageSmoothingEnabled = false;
   let shadow = "#698353";
   if (background === "white" || background === "black") {
@@ -143,8 +171,10 @@ export function drawScene(canvas, players, now, ownSlot = -1, background = "orig
     const x = Math.round(player.x);
     pixels(ctx, shadow, x - 10, FLOOR, 20, 2);
     pixels(ctx, shadow, x - 7, FLOOR + 2, 14, 1);
-    drawCharacter(ctx, player.character, player.sprite, player.x, player.y, player.pose, player.facing, now, player.slot);
+    drawCharacter(ctx, player.character, player.sprite, player.x, player.y,
+      player.pose, player.facing, now, player.slot, Boolean(player.effects & EFFECT.squash));
   }
+  for (const player of ordered) drawEffects(ctx, player, Math.round(player.x), Math.round(player.y));
   ctx.font = "bold 9px system-ui, sans-serif";
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
