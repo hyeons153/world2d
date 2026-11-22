@@ -1,4 +1,4 @@
-import { characters, drawCharacter, readPng } from "./characters.mjs";
+import { characters, drawCharacter, readSprite } from "./characters.mjs";
 import { Connection, roomAvailable } from "./connection.mjs";
 import { movePlayer, setAutoMove } from "./movement.mjs";
 import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, FLOOR, HEIGHT, KEY, nickname, POSE, validSprite, WIDTH } from "./protocol.mjs";
@@ -10,6 +10,7 @@ const form = $("entry");
 const pipButton = $("pip");
 const autoMoveButton = $("auto-move");
 const backgroundSelect = $("background-select");
+const backButton = $("back-to-entry");
 const savedKey = "pixel-clearing.profile.v1";
 const settingsKey = "pixel-clearing.settings.v1";
 const identityKey = "pixel-clearing.identity.v1";
@@ -28,9 +29,11 @@ $("nickname").value = nickname(saved?.name);
 let sprite = validSprite(saved?.sprite) ? saved.sprite : undefined;
 let selected = sprite && saved?.character === "custom" ? "custom" : builtinCharacter(saved?.character) ?? DEFAULT_CHARACTER;
 let currentFile;
+let imageReadController;
 let reading = 0;
 let loadingImage = false;
 let starting = false;
+let roomAttempt = 0;
 let fallbackIdentity;
 let playing = false;
 let localPlayer;
@@ -82,7 +85,7 @@ function message(id, value) {
 const profileButtons = new Map();
 function renderCharacters() {
   const entries = Object.entries(characters);
-  if (sprite) entries.push(["custom", { name: "내 PNG" }]);
+  if (sprite) entries.push(["custom", { name: sprite.animation ? "내 GIF" : "내 이미지" }]);
   for (const [id, details] of entries) {
     let button = profileButtons.get(id);
     if (!button) {
@@ -93,13 +96,28 @@ function renderCharacters() {
       canvas.width = canvas.height = 32;
       canvas.setAttribute("aria-hidden", "true");
       button.append(canvas, document.createTextNode(details.name));
-      $("characters").append(button);
+      if (id === "custom") {
+        const card = document.createElement("div");
+        card.className = "custom-character";
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "delete-character";
+        remove.setAttribute("aria-label", "내 캐릭터 삭제");
+        remove.title = "내 캐릭터 삭제";
+        remove.textContent = "×";
+        remove.addEventListener("click", removeCustomCharacter);
+        card.append(button, remove);
+        $("characters").append(card);
+      } else {
+        $("characters").append(button);
+      }
       profileButtons.set(id, button);
       button.addEventListener("click", () => {
         selected = id;
         selectCharacter();
       });
     }
+    button.lastChild.textContent = details.name;
     const ctx = button.firstChild.getContext("2d");
     ctx.clearRect(0, 0, 32, 32);
     ctx.imageSmoothingEnabled = false;
@@ -118,23 +136,48 @@ function joinButton() {
   $("join").setAttribute("aria-busy", String(busy));
 }
 
+function removeCustomCharacter() {
+  reading++;
+  imageReadController?.abort();
+  imageReadController = undefined;
+  currentFile = undefined;
+  loadingImage = false;
+  sprite = undefined;
+  if (selected === "custom") selected = DEFAULT_CHARACTER;
+  profileButtons.get("custom")?.parentElement.remove();
+  profileButtons.delete("custom");
+  selectCharacter();
+  joinButton();
+  message("entry-message", "");
+  persist(nickname($("nickname").value));
+  profileButtons.get(selected)?.focus();
+}
+
 async function loadFile() {
   if (!currentFile) return;
   const turn = ++reading;
+  imageReadController?.abort();
+  const controller = new AbortController();
+  imageReadController = controller;
   loadingImage = true;
   joinButton();
   message("entry-message", "");
   try {
-    const image = await readPng(currentFile, $("sprite-sheet").checked ? 4 : 1);
+    const image = await readSprite(currentFile, $("sprite-sheet").checked ? 4 : 1, controller.signal);
     if (turn !== reading) return;
     sprite = image;
     selected = "custom";
+    $("sprite-sheet").checked = sprite.frames === 4;
     renderCharacters();
     persist(nickname($("nickname").value));
   } catch (error) {
-    if (turn === reading) message("entry-message", error.message || "이미지를 열 수 없어요.");
+    if (turn === reading) {
+      $("sprite-sheet").checked = sprite?.frames === 4;
+      message("entry-message", error.message || "이미지를 열 수 없어요.");
+    }
   } finally {
     if (turn === reading) {
+      imageReadController = undefined;
       loadingImage = false;
       joinButton();
     }
@@ -177,6 +220,7 @@ function setPlaying(next) {
   document.body.toggleAttribute("data-playing", next);
   form.hidden = next;
   $("touch").hidden = !next || !supportsTouch;
+  backButton.hidden = !next;
   autoMoveButton.hidden = !next;
   pipButton.hidden = !next || !supportsPip;
   if (next) {
@@ -190,6 +234,23 @@ function setPlaying(next) {
   }
 }
 
+function leaveRoom() {
+  roomAttempt++;
+  starting = false;
+  resetInput();
+  connection?.stop();
+  connection = undefined;
+  if (pipWindow && !pipWindow.closed) pipWindow.close();
+  players.clear();
+  setPlaying(false);
+  joinButton();
+}
+
+backButton.addEventListener("click", () => {
+  leaveRoom();
+  profileButtons.get(selected)?.focus();
+});
+
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (loadingImage || starting || playing) return;
@@ -200,6 +261,7 @@ form.addEventListener("submit", async (event) => {
     return;
   }
   starting = true;
+  const attempt = ++roomAttempt;
   joinButton();
   try {
     persist(name);
@@ -216,6 +278,7 @@ form.addEventListener("submit", async (event) => {
     if (!roomAvailable) return;
 
     const token = await browserIdentity();
+    if (attempt !== roomAttempt) return;
     connection = new Connection({ token, ...profile, autoMove }, {
       state: showConnection,
       welcome(slot) {
@@ -242,10 +305,7 @@ form.addEventListener("submit", async (event) => {
         if (pipWindow && now - lastPaint > 100) paint();
       },
       ended(code) {
-        resetInput();
-        pipWindow?.close();
-        players.clear();
-        setPlaying(false);
+        leaveRoom();
         const errors = {
           0: roomUnavailable,
           4001: "이 브라우저의 다른 탭에서 입장했어요.",
@@ -257,14 +317,15 @@ form.addEventListener("submit", async (event) => {
     });
     connection.start();
   } catch {
-    resetInput();
-    connection?.stop();
-    pipWindow?.close();
-    setPlaying(false);
-    message("entry-message", "입장을 시작할 수 없어요. 잠시 후 다시 시도해 주세요.");
+    if (attempt === roomAttempt) {
+      leaveRoom();
+      message("entry-message", "입장을 시작할 수 없어요. 잠시 후 다시 시도해 주세요.");
+    }
   } finally {
-    starting = false;
-    joinButton();
+    if (attempt === roomAttempt) {
+      starting = false;
+      joinButton();
+    }
   }
 });
 
@@ -417,10 +478,15 @@ pipButton.addEventListener("click", async () => {
     return;
   }
   if (!supportsPip || !playing) return;
+  const attempt = roomAttempt;
   resetInput();
   pipButton.disabled = true;
   try {
     const host = await window.documentPictureInPicture.requestWindow({ width: 400, height: 225 });
+    if (!playing || attempt !== roomAttempt) {
+      host.close();
+      return;
+    }
     pipWindow = host;
     host.addEventListener("pagehide", () => {
       resetInput();
@@ -430,10 +496,6 @@ pipButton.addEventListener("click", async () => {
       updatePipButton();
       movePaint();
     }, { once: true });
-    if (!playing) {
-      host.close();
-      return;
-    }
     host.document.title = "픽셀 공터";
     showBackground();
     const style = host.document.createElement("link");
