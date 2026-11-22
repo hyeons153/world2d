@@ -119,24 +119,30 @@ const motes = Array.from({ length: 22 }, (_, index) => ({
   phase: index * 2.9,
 }));
 
-export function drawScene(canvas, players, now, ownSlot = -1) {
+export function drawScene(canvas, players, now, ownSlot = -1, background = "original") {
   const ctx = canvas.getContext("2d", { alpha: false });
   ctx.imageSmoothingEnabled = false;
-  backdrop ??= makeBackdrop();
-  ctx.drawImage(backdrop, 0, 0);
-
-  for (const mote of motes) {
-    const glow = Math.sin(now / 730 + mote.phase);
-    if (glow < 0.05) continue;
-    const x = Math.floor(mote.x + 3 * Math.sin(now / 970 + mote.phase));
-    const y = Math.floor(mote.y + 3 * Math.cos(now / 1100 + mote.phase));
-    pixels(ctx, glow > 0.58 ? "#fff1bb" : "#cbd2a0", x, y, glow > 0.82 ? 2 : 1, 1);
+  let shadow = "#698353";
+  if (background === "white" || background === "black") {
+    const white = background === "white";
+    pixels(ctx, white ? "#fff" : "#000", 0, 0, WIDTH, HEIGHT);
+    shadow = white ? "#dedede" : "#252525";
+  } else {
+    backdrop ??= makeBackdrop();
+    ctx.drawImage(backdrop, 0, 0);
+    for (const mote of motes) {
+      const glow = Math.sin(now / 730 + mote.phase);
+      if (glow < 0.05) continue;
+      const x = Math.floor(mote.x + 3 * Math.sin(now / 970 + mote.phase));
+      const y = Math.floor(mote.y + 3 * Math.cos(now / 1100 + mote.phase));
+      pixels(ctx, glow > 0.58 ? "#fff1bb" : "#cbd2a0", x, y, glow > 0.82 ? 2 : 1, 1);
+    }
   }
   const ordered = [...players].sort((a, b) => a.y - b.y || a.slot - b.slot);
   for (const player of ordered) {
     const x = Math.round(player.x);
-    pixels(ctx, "#698353", x - 10, FLOOR, 20, 2);
-    pixels(ctx, "#698353", x - 7, FLOOR + 2, 14, 1);
+    pixels(ctx, shadow, x - 10, FLOOR, 20, 2);
+    pixels(ctx, shadow, x - 7, FLOOR + 2, 14, 1);
     drawCharacter(ctx, player.character, player.sprite, player.x, player.y, player.pose, player.facing, now, player.slot);
   }
   ctx.font = "bold 9px system-ui, sans-serif";
@@ -167,7 +173,7 @@ export function previewPlayers(time) {
     const phase = time / (1150 + slot * 100) + slot * 1.75;
     const jumping = (time / 1_000 + slot * 2.15) % 7.3;
     return {
-      slot, character, name: "", x: 94 + slot * 38 + Math.sin(phase) * 15,
+      slot, character, name: "", x: 70 + slot * 35 + Math.sin(phase) * 12,
       y: FLOOR - (jumping < 0.75 ? Math.sin(jumping / 0.75 * Math.PI) * 18 : 0),
       pose: jumping < 0.75 ? POSE.jump : Math.abs(Math.cos(phase)) > 0.3 ? POSE.walk : POSE.sit,
       facing: Math.cos(phase) >= 0 ? 1 : -1,
