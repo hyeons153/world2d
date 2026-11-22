@@ -75,27 +75,7 @@ function drawBuiltin(ctx, id, step, pose) {
   if (!atlas) return;
   const { tile } = characters[id];
   const height = pose === POSE.sit ? 28 : pose === POSE.jump ? 31 : PIXELS;
-  if (id === "hachiware") {
-    ctx.fillStyle = "#352c37";
-    ctx.fillRect(10, -7 - step, 5, 4);
-    ctx.fillRect(13, -8 - step, 3, 3);
-    ctx.fillStyle = "#86acca";
-    ctx.fillRect(11, -6 - step, 4, 2);
-    ctx.fillRect(14, -7 - step, 1, 1);
-  }
   ctx.drawImage(atlas, tile * PIXELS, 0, PIXELS, PIXELS, -PIXELS / 2, -height - step, PIXELS, height);
-  if (id === "kani" && (pose === POSE.idle || pose === POSE.sit)) {
-    ctx.fillStyle = "#504049";
-    ctx.fillRect(-6, -8, 12, 6);
-    ctx.fillRect(-6, -9, 5, 1);
-    ctx.fillRect(1, -9, 5, 1);
-    ctx.fillStyle = "#ecedb1";
-    ctx.fillRect(-5, -8, 4, 5);
-    ctx.fillRect(1, -8, 4, 5);
-    ctx.fillStyle = "#b1a578";
-    ctx.fillRect(-4, -6, 2, 1);
-    ctx.fillRect(2, -6, 2, 1);
-  }
 }
 
 export async function readSprite(file, frames, signal) {
