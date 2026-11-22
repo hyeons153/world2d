@@ -15,8 +15,12 @@ export default {
 };
 
 export class Playground extends DurableObject {
-  room = new Room();
   connections = new Map();
+
+  constructor(ctx, env) {
+    super(ctx, env);
+    this.room = new Room({ practiceNpc: env.PRACTICE_NPC === "1" });
+  }
 
   async fetch(request) {
     const ip = request.headers.get("CF-Connecting-IP");
