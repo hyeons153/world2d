@@ -12,23 +12,39 @@
 *, *::before, *::after { box-sizing: border-box; }
 body { margin: 0; min-width: 280px; padding-bottom: env(safe-area-inset-bottom); }
 [hidden] { display: none !important; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { cursor: pointer; }
-button:focus-visible, input:focus-visible { outline: 2px solid #617b4b; outline-offset: 3px; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #617b4b; outline-offset: 3px; }
 .container { width: min(1140px, calc(100% - 48px)); margin-inline: auto; }
 .site-header { padding-top: env(safe-area-inset-top); border-bottom: 1px solid var(--line); }
-.header-inner { display: flex; align-items: center; justify-content: space-between; min-height: 48px; gap: 12px; }
-.brand { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 750; }
+.header-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; min-height: 48px; gap: 6px; padding-block: 4px; }
+.brand { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 750; white-space: nowrap; }
+.header-controls { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.background-select, .auto-move-button {
+  height: 36px;
+  padding-inline: 7px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.background-select { cursor: pointer; }
+.auto-move-button[aria-pressed="true"] { background: #e9efda; border-color: #a6b28f; }
+.auto-move-button span { font-weight: 750; }
 main.container { padding-block: 16px; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
 .playground { overflow: hidden; background: #273c34; border: 1px solid #273c34; border-radius: 14px; color: #f4f0dc; box-shadow: 0 6px 22px #34483812; }
 .scene-surface { position: relative; overflow: hidden; background: #273c34; }
+body[data-background="white"] .scene-surface { background: #fff; }
+body[data-background="black"] .scene-surface { background: #000; }
 .scene-surface canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; image-rendering: crisp-edges; image-rendering: pixelated; }
 .pip-button {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   color: var(--ink);
   background: transparent;
   border: 1px solid var(--line);
@@ -111,4 +127,7 @@ body[data-playing] .touch { flex-shrink: 0; }
 }
 @media (max-width: 340px) {
   .characters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .brand { gap: 4px; font-size: 13px; }
+  .header-controls { gap: 4px; }
+  .background-select, .auto-move-button { padding-inline: 4px; }
 }
