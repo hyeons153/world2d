@@ -1,7 +1,7 @@
 import { characters, drawCharacter, readSprite } from "./characters.mjs";
 import { Connection, roomAvailable } from "./connection.mjs";
 import { movePlayer, setAutoMove } from "./movement.mjs";
-import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, FLOOR, HEIGHT, KEY, nickname, POSE, validSprite, WIDTH } from "./protocol.mjs";
+import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, FLOOR, HEIGHT, KEY, nickname, PIXELS, POSE, validSprite, WIDTH } from "./protocol.mjs";
 import { drawScene, previewPlayers } from "./scene.mjs";
 
 const $ = (id) => document.getElementById(id);
@@ -9,8 +9,9 @@ const scene = $("scene");
 const form = $("entry");
 const pipButton = $("pip");
 const autoMoveButton = $("auto-move");
-const backgroundSelect = $("background-select");
+const backgroundButtons = [...document.querySelectorAll("[data-map-background]")];
 const backButton = $("back-to-entry");
+const deleteDialog = $("delete-dialog");
 const savedKey = "pixel-clearing.profile.v1";
 const settingsKey = "pixel-clearing.settings.v1";
 const identityKey = "pixel-clearing.identity.v1";
@@ -22,9 +23,9 @@ let saved;
 try { saved = JSON.parse(localStorage.getItem(savedKey)); } catch {}
 let settings;
 try { settings = JSON.parse(localStorage.getItem(settingsKey)); } catch {}
-let autoMove = settings?.autoMove !== false;
-backgroundSelect.value = settings?.background ?? "original";
-if (!backgroundSelect.value) backgroundSelect.value = "original";
+let autoMove = false;
+const savedBackground = settings?.background;
+let background = backgroundButtons.some((button) => button.dataset.mapBackground === savedBackground) ? savedBackground : "original";
 $("nickname").value = nickname(saved?.name);
 let sprite = validSprite(saved?.sprite) ? saved.sprite : undefined;
 let selected = sprite && saved?.character === "custom" ? "custom" : builtinCharacter(saved?.character) ?? DEFAULT_CHARACTER;
@@ -48,7 +49,7 @@ let scheduled;
 const players = new Map();
 
 function saveSettings() {
-  try { localStorage.setItem(settingsKey, JSON.stringify({ autoMove, background: backgroundSelect.value })); } catch {}
+  try { localStorage.setItem(settingsKey, JSON.stringify({ background })); } catch {}
 }
 
 function showAutoMove() {
@@ -57,7 +58,9 @@ function showAutoMove() {
 }
 
 function showBackground() {
-  const background = backgroundSelect.value;
+  for (const button of backgroundButtons) {
+    button.setAttribute("aria-pressed", String(button.dataset.mapBackground === background));
+  }
   document.body.dataset.background = background;
   if (pipWindow && !pipWindow.closed) pipWindow.document.documentElement.dataset.background = background;
 }
@@ -67,13 +70,14 @@ autoMoveButton.addEventListener("click", () => {
   if (localPlayer) setAutoMove(localPlayer, autoMove, performance.now());
   connection?.setAutoMove(autoMove);
   showAutoMove();
-  saveSettings();
 });
-backgroundSelect.addEventListener("change", () => {
-  showBackground();
-  saveSettings();
-});
-showAutoMove();
+for (const button of backgroundButtons) {
+  button.addEventListener("click", () => {
+    background = button.dataset.mapBackground;
+    showBackground();
+    saveSettings();
+  });
+}
 showBackground();
 
 function message(id, value) {
@@ -93,7 +97,7 @@ function renderCharacters() {
       button.type = "button";
       button.className = "character";
       const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = 32;
+      canvas.width = canvas.height = PIXELS;
       canvas.setAttribute("aria-hidden", "true");
       button.append(canvas, document.createTextNode(details.name));
       if (id === "custom") {
@@ -105,7 +109,7 @@ function renderCharacters() {
         remove.setAttribute("aria-label", "내 캐릭터 삭제");
         remove.title = "내 캐릭터 삭제";
         remove.textContent = "×";
-        remove.addEventListener("click", removeCustomCharacter);
+        remove.addEventListener("click", () => deleteDialog.showModal());
         card.append(button, remove);
         $("characters").append(card);
       } else {
@@ -119,9 +123,9 @@ function renderCharacters() {
     }
     button.lastChild.textContent = details.name;
     const ctx = button.firstChild.getContext("2d");
-    ctx.clearRect(0, 0, 32, 32);
+    ctx.clearRect(0, 0, PIXELS, PIXELS);
     ctx.imageSmoothingEnabled = false;
-    drawCharacter(ctx, id, sprite, 16, 31, POSE.idle, 1, 0);
+    drawCharacter(ctx, id, sprite, PIXELS / 2, PIXELS, POSE.idle, 1, 0);
   }
   selectCharacter();
 }
@@ -152,6 +156,12 @@ function removeCustomCharacter() {
   persist(nickname($("nickname").value));
   profileButtons.get(selected)?.focus();
 }
+
+$("cancel-delete").addEventListener("click", () => deleteDialog.close());
+$("confirm-delete").addEventListener("click", () => {
+  deleteDialog.close();
+  removeCustomCharacter();
+});
 
 async function loadFile() {
   if (!currentFile) return;
@@ -269,6 +279,8 @@ form.addEventListener("submit", async (event) => {
     message("entry-message", "");
     message("play-message", "");
     const profile = { name, character: selected, sprite: selected === "custom" ? sprite : undefined };
+    autoMove = false;
+    showAutoMove();
     localPlayer = {
       ...profile, slot: -1, x: WIDTH / 2, y: FLOOR, vy: 0, facing: 1, pose: POSE.idle,
       keys: 0, inputUntil: Infinity, autoMove, nextAction: performance.now() + 550,
@@ -369,7 +381,6 @@ function paint() {
   } else {
     visible = previewPlayers(now);
   }
-  const background = backgroundSelect.value;
   if (!document.hidden || !pipCanvas) drawScene(scene, visible, now, playing ? ownSlot : -1, background);
   if (pipCanvas) drawScene(pipCanvas, visible, now, ownSlot, background);
 }
@@ -467,7 +478,7 @@ for (const button of document.querySelectorAll("#touch button")) {
 }
 
 function updatePipButton() {
-  const label = pipWindow ? "PiP 닫기" : "PiP 켜기";
+  const label = pipWindow ? "PIP 닫기" : "PIP 켜기";
   pipButton.setAttribute("aria-label", label);
   pipButton.title = label;
 }
