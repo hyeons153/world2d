@@ -119,14 +119,29 @@ const motes = Array.from({ length: 22 }, (_, index) => ({
   phase: index * 2.9,
 }));
 
+const impactBurst = [
+  "........x....",
+  "..x....xx....",
+  "...x...xx..x.",
+  "...xx.xxxxx..",
+  "xx..xxooox...",
+  "..xxxoo++oxxx",
+  "....xoo+oxx..",
+  "...xxooox.xx.",
+  "..xx.xxx.....",
+  ".xx...x......",
+  ".x....x......",
+];
+const impactColors = { x: "#98434e", o: "#cb666c", "+": "#e99a91" };
+
 function drawEffects(ctx, player, x, y) {
   if (player.effects & EFFECT.hit) {
-    pixels(ctx, "#985354", x - 3, y - 25, 6, 16);
-    pixels(ctx, "#985354", x - 9, y - 20, 18, 6);
-    pixels(ctx, "#fff6c6", x - 2, y - 24, 4, 14);
-    pixels(ctx, "#ffe295", x - 8, y - 19, 16, 4);
-    pixels(ctx, "#ffe295", x - 11, y - 26, 2, 2);
-    pixels(ctx, "#fff6c6", x + 9, y - 11, 2, 2);
+    for (let row = 0; row < impactBurst.length; row++) {
+      for (let column = 0; column < impactBurst[row].length; column++) {
+        const color = impactColors[impactBurst[row][column]];
+        if (color) pixels(ctx, color, x + column - 6, y + row - 22, 1, 1);
+      }
+    }
   }
   if (player.effects & EFFECT.squash) {
     pixels(ctx, "#a17a63", x - 19, y - 5, 4, 2);
