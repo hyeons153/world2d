@@ -89,8 +89,16 @@ export class Room {
       facing: slot % 2 ? -1 : 1, pose: POSE.idle, nextAction: now + between(250, 950),
       autoMove: message.autoMove !== false,
     };
-    const sprite = custom ? { frames: message.sprite.frames, pixels: message.sprite.pixels } : undefined;
-    const announce = !oldSocket || player.name !== name || player.character !== character || player.sprite?.pixels !== sprite?.pixels;
+    let sprite;
+    if (custom) {
+      const { frames, pixels, animation } = message.sprite;
+      sprite = { frames, pixels };
+      if (animation) sprite.animation = { delays: animation.delays, pixels: animation.pixels };
+    }
+    const announce = !oldSocket || player.name !== name || player.character !== character ||
+      player.sprite?.frames !== sprite?.frames || player.sprite?.pixels !== sprite?.pixels ||
+      player.sprite?.animation?.pixels !== sprite?.animation?.pixels ||
+      player.sprite?.animation?.delays.join() !== sprite?.animation?.delays.join();
     Object.assign(player, { slot, name, character, sprite, socket, keys: 0, inputUntil: 0, jumpQueued: false });
     setAutoMove(player, message.autoMove !== false, now);
     this.players.set(message.token, player);
