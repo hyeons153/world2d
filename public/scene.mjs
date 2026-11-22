@@ -132,7 +132,7 @@ const impactBurst = [
   ".xx...x......",
   ".x....x......",
 ];
-const impactColors = { x: "#98434e", o: "#cb666c", "+": "#e99a91" };
+const impactColors = { x: "#b5662f", o: "#f09a48", "+": "#ffd18a" };
 
 function drawEffects(ctx, player, x, y) {
   if (player.effects & EFFECT.hit) {
