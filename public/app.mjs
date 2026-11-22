@@ -402,8 +402,8 @@ movePaint();
 
 const controls = {
   ArrowLeft: KEY.left, ArrowRight: KEY.right,
-  KeyA: KEY.jump, Space: KEY.jump,
-  KeyD: KEY.attack, ControlLeft: KEY.attack, ControlRight: KEY.attack,
+  KeyC: KEY.jump, Space: KEY.jump,
+  KeyZ: KEY.attack, ControlLeft: KEY.attack, ControlRight: KEY.attack,
 };
 const pressed = new Map();
 const touches = new Map();
@@ -446,7 +446,7 @@ function bindKeys(host) {
     }
     if (target?.matches?.("input, textarea, [contenteditable], select") ||
         (target?.matches?.("button, a") && event.code === "Space")) return;
-    if (event.altKey || event.metaKey || (event.ctrlKey && event.code === "KeyD")) return;
+    if (event.altKey || event.metaKey || (event.ctrlKey && event.code === "KeyZ")) return;
     event.preventDefault();
     if (event.type === "keydown" && !event.repeat) pressed.set(event.code, key);
     submitInput();
