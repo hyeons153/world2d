@@ -120,23 +120,13 @@ const motes = Array.from({ length: 22 }, (_, index) => ({
 }));
 
 function drawEffects(ctx, player, x, y) {
-  if (player.effects & EFFECT.attack) {
-    ctx.save();
-    ctx.translate(x + player.facing * 17, y - 13);
-    ctx.scale(player.facing, 1);
-    pixels(ctx, "#74433c", 4, -7, 9, 3);
-    pixels(ctx, "#74433c", 10, -4, 5, 6);
-    pixels(ctx, "#74433c", 5, 2, 8, 3);
-    pixels(ctx, "#fff0a7", 5, -6, 7, 1);
-    pixels(ctx, "#fff0a7", 11, -4, 3, 6);
-    pixels(ctx, "#fbb474", 7, 2, 5, 2);
-    ctx.restore();
-  }
   if (player.effects & EFFECT.hit) {
-    pixels(ctx, "#985354", x - 3, y - 27, 6, 10);
-    pixels(ctx, "#985354", x - 7, y - 24, 14, 4);
-    pixels(ctx, "#fff6c6", x - 2, y - 26, 4, 8);
-    pixels(ctx, "#ffe295", x - 6, y - 23, 12, 2);
+    pixels(ctx, "#985354", x - 3, y - 25, 6, 16);
+    pixels(ctx, "#985354", x - 9, y - 20, 18, 6);
+    pixels(ctx, "#fff6c6", x - 2, y - 24, 4, 14);
+    pixels(ctx, "#ffe295", x - 8, y - 19, 16, 4);
+    pixels(ctx, "#ffe295", x - 11, y - 26, 2, 2);
+    pixels(ctx, "#fff6c6", x + 9, y - 11, 2, 2);
   }
   if (player.effects & EFFECT.squash) {
     pixels(ctx, "#a17a63", x - 19, y - 5, 4, 2);
@@ -172,7 +162,7 @@ export function drawScene(canvas, players, now, ownSlot = -1, background = "orig
     pixels(ctx, shadow, x - 10, FLOOR, 20, 2);
     pixels(ctx, shadow, x - 7, FLOOR + 2, 14, 1);
     drawCharacter(ctx, player.character, player.sprite, player.x, player.y,
-      player.pose, player.facing, now, player.slot, Boolean(player.effects & EFFECT.squash));
+      player.pose, player.facing, now, player.slot, player.effects);
   }
   for (const player of ordered) drawEffects(ctx, player, Math.round(player.x), Math.round(player.y));
   ctx.font = "bold 9px system-ui, sans-serif";
