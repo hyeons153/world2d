@@ -1,5 +1,5 @@
 import { EFFECT, FLOOR, KEY, POSE } from "./protocol.mjs";
-import { belowCamera, clampX, climbCamera, platforms, SKY_LIMIT, towerHazards, worldPhase } from "./tower.mjs";
+import { belowCamera, clampX, climbCamera, firstPlatformAtOrAbove, platforms, SKY_LIMIT, towerHazards, worldPhase } from "./tower.mjs";
 
 export const WALK_SPEED = 47;
 const JUMP_SPEED = 168;
@@ -23,18 +23,19 @@ function overlapsPlatform(x, platform) {
 
 function advancePlayer(player, { direction, jump, knockback }, dt) {
   const startY = player.y;
-  const grounded = !player.vy && (startY === FLOOR ||
-    platforms.some((platform) => startY === platform.y && overlapsPlatform(player.x, platform)));
-  if (jump && grounded) player.vy = -JUMP_SPEED;
+  if (jump && !player.vy) {
+    const support = platforms[firstPlatformAtOrAbove(startY)];
+    if (startY === FLOOR || (support?.y === startY && overlapsPlatform(player.x, support))) player.vy = -JUMP_SPEED;
+  }
   if (direction) player.facing = direction;
   player.x = clampX(player.x + (direction * WALK_SPEED + knockback) * dt);
   player.vy += 360 * dt;
   const nextY = Math.max(SKY_LIMIT, startY + player.vy * dt);
   let surface;
   if (player.vy >= 0) {
-    for (const platform of platforms) {
-      if (platform.y < startY || platform.y > nextY || !overlapsPlatform(player.x, platform)) continue;
-      if (surface === undefined || platform.y < surface) surface = platform.y;
+    for (let i = firstPlatformAtOrAbove(nextY); i < platforms.length && platforms[i].y >= startY; i++) {
+      const platform = platforms[i];
+      if (overlapsPlatform(player.x, platform)) surface = platform.y;
     }
     if (surface === undefined && nextY >= FLOOR) surface = FLOOR;
   }

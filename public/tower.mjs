@@ -1,32 +1,64 @@
 import { FLOOR, HEIGHT, LIMIT, PIXELS, WIDTH } from "./protocol.mjs";
 
 export const METRE = 16;
-export const TOWER_HEIGHT = 30;
+export const TOWER_HEIGHT = 100;
 export const SUMMIT_Y = FLOOR - TOWER_HEIGHT * METRE;
 export const SKY_LIMIT = SUMMIT_Y - 36;
 export const BODY_HEIGHT = PIXELS + 2;
 export const WORLD_CYCLE = 24_000;
 const CAMERA_FOLLOW_Y = 108;
 
-// Heights are in world pixels above the clearing. Platforms collide only from above.
+// Each entry is [height above the clearing, centre x, width] in world pixels.
+// Keep these sorted by height so collision checks can start near each player.
 export const platforms = [
-  [24, 44, 58], [45, 78, 62], [67, 113, 62], [89, 151, 62],
-  [111, 189, 62], [134, 228, 60], [158, 268, 66], [181, 238, 58],
-  [205, 199, 58], [230, 158, 65], [254, 118, 57], [279, 77, 56],
-  [304, 42, 65], [329, 79, 58], [354, 120, 64], [379, 163, 57],
-  [405, 204, 62], [431, 246, 65], [457, 275, 57], [480, 299, 55],
-].map(([height, x, width]) => ({ x, y: FLOOR - height, width }));
+  [24, 73, 58], [45, 109, 62], [67, 144, 62], [89, 182, 62],
+  [111, 220, 62], [134, 258, 60], [158, 301, 66],
+  [184, 264, 50], [209, 222, 44], [235, 184, 40], [261, 151, 36],
+  [287, 119, 38], [313, 79, 54],
+  [339, 106, 38], [366, 147, 34], [391, 190, 36], [418, 223, 34],
+  [444, 255, 32], [470, 297, 44], [497, 331, 54],
+  [524, 297, 34], [551, 252, 32], [578, 216, 32], [605, 182, 30],
+  [631, 143, 30], [658, 108, 30], [685, 72, 46],
+  [713, 113, 32], [740, 151, 28], [767, 187, 28], [794, 151, 30],
+  [821, 115, 28], [848, 83, 32], [875, 122, 30], [902, 166, 28],
+  [929, 202, 28], [956, 246, 52],
+  [983, 285, 30], [1010, 325, 28], [1037, 294, 28], [1064, 254, 28],
+  [1091, 213, 28], [1118, 179, 26], [1145, 142, 30], [1172, 99, 28],
+  [1199, 58, 48],
+  [1226, 96, 30], [1253, 136, 26], [1281, 170, 24], [1308, 208, 26],
+  [1335, 247, 24], [1362, 285, 28], [1388, 326, 32], [1415, 289, 26],
+  [1442, 253, 24], [1469, 218, 24], [1496, 177, 26], [1523, 139, 26],
+  [1550, 101, 28], [1576, 65, 28], [TOWER_HEIGHT * METRE, 99, 62],
+].map(([height, centre, width]) => ({ x: centre - width / 2, y: FLOOR - height, width }));
+
+export function firstPlatformAtOrAbove(y) {
+  let start = 0;
+  let end = platforms.length;
+  while (start < end) {
+    const mid = Math.floor((start + end) / 2);
+    if (platforms[mid].y > y) start = mid + 1;
+    else end = mid;
+  }
+  return start;
+}
 
 const spikes = [
-  [8, 34, 900], [12, 2, 2_700], [14, 41, 1_750], [16, 1, 610], [17, 43, 3_000],
-].map(([index, left, offset]) => ({
-  x: platforms[index].x + left, y: platforms[index].y, width: 20, offset,
-}));
+  [209, 24, 15, 900], [313, 4, 20, 2_700], [418, 18, 15, 1_750],
+  [551, 2, 15, 610], [658, 14, 15, 3_000], [767, 11, 15, 1_200],
+  [875, 3, 15, 2_160], [956, 32, 20, 330], [1037, 2, 15, 1_390],
+  [1118, 9, 15, 2_910], [1253, 9, 15, 1_300], [1335, 1, 15, 3_000],
+  [1442, 8, 15, 1_660], [1523, 3, 15, 740],
+].map(([height, left, width, offset]) => {
+  const platform = platforms[firstPlatformAtOrAbove(FLOOR - height)];
+  return { x: platform.x + left, y: platform.y, width, offset };
+});
 const birds = [
-  { min: 37, max: 148, y: FLOOR - 288, period: 4_000, offset: 1_050 },
-  { min: 103, max: 248, y: FLOOR - 370, period: 4_800, offset: 2_520 },
-  { min: 230, max: 348, y: FLOOR - 415, period: 4_000, offset: 530 },
-];
+  [352, 36, 174, 4_000, 1_050], [470, 214, 352, 4_800, 2_520],
+  [612, 96, 246, 4_000, 530], [754, 57, 210, 4_800, 1_180],
+  [908, 95, 261, 4_000, 1_730], [1044, 220, 358, 4_800, 440],
+  [1165, 30, 179, 4_000, 2_330], [1291, 90, 238, 4_800, 1_420],
+  [1405, 212, 362, 4_000, 3_120], [1510, 64, 225, 4_800, 1_370],
+].map(([height, min, max, period, offset]) => ({ y: FLOOR - height, min, max, period, offset }));
 
 export function worldPhase(time) {
   return ((time % WORLD_CYCLE) + WORLD_CYCLE) % WORLD_CYCLE;

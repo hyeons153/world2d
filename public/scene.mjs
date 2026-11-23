@@ -1,7 +1,7 @@
 import { characters, drawCharacter, RENDER_SCALE } from "./characters.mjs";
 import { drawEmote, EMOTE_SIZE } from "./emotes.mjs";
 import { EFFECT, WIDTH, HEIGHT, FLOOR, POSE, validEmote } from "./protocol.mjs";
-import { BODY_HEIGHT, heightMetres, offscreenPlayers, platforms, SUMMIT_Y, towerHazards, TOWER_HEIGHT } from "./tower.mjs";
+import { BODY_HEIGHT, firstPlatformAtOrAbove, heightMetres, METRE, offscreenPlayers, platforms, SUMMIT_Y, towerHazards, TOWER_HEIGHT } from "./tower.mjs";
 
 function pixels(ctx, color, x, y, width, height) {
   ctx.fillStyle = color;
@@ -156,28 +156,34 @@ function drawEffects(ctx, player, x, y) {
 
 function drawUpperSky(ctx, lift) {
   if (!lift) return;
-  const palette = ["#9095bb", "#838cb5", "#777fac", "#6c76a3", "#636d98", "#59658e"];
-  for (let height = 0; height < lift; height += 86) {
+  const palette = ["#9095bb", "#838cb5", "#777fac", "#6c76a3", "#636d98", "#556289", "#455478", "#394969", "#303c59", "#282f48"];
+  const band = METRE * 10;
+  const firstBand = Math.floor(Math.max(0, lift - HEIGHT) / band) * band;
+  for (let height = firstBand; height < lift; height += band) {
     const y = lift - height;
-    pixels(ctx, palette[Math.min(palette.length - 1, height / 86)], 0, y - 86, WIDTH, 86);
+    pixels(ctx, palette[Math.min(palette.length - 1, height / band)], 0, y - band, WIDTH, band);
   }
-  for (let index = 0; index < 25; index++) {
-    const y = lift - (index * 43 + 19) % 475;
-    if (y > 0 && y < lift - 10) {
-      const x = (index * 71 + 25) % WIDTH;
-      pixels(ctx, "#d5c3ce", x, y, index % 5 ? 1 : 3, 1);
-      if (index % 5 === 0) cloud(ctx, x - 30, y + 4, 45, "#bcb1cc", "#a69dbd");
-    }
+  const firstStar = Math.floor(Math.max(0, lift - HEIGHT) / 21);
+  for (let index = firstStar; index * 21 < lift; index++) {
+    const height = index * 21 + (index * 13 + 17) % 20;
+    const y = lift - height;
+    const x = (index * 71 + 25) % WIDTH;
+    const high = height >= 480;
+    pixels(ctx, high ? "#ddd0bf" : "#d5c3ce", x, y, index % 4 ? 1 : 2, 1);
+    if (!high && index % 5 === 0) cloud(ctx, x - 30, y + 4, 45, "#bcb1cc", "#a69dbd");
   }
 }
 
 function drawTower(ctx, lift, phase, background) {
-  const tops = background === "black" ? "#acbf9b" : "#c9d693";
-  for (const { x, y, width } of platforms) {
+  const railColors = ["#c9d693", "#c6dbb3", "#bacdde", "#d0bee1", "#ecd1a1"];
+  for (let i = firstPlatformAtOrAbove(HEIGHT - lift); i < platforms.length; i++) {
+    const { x, y, width } = platforms[i];
     const sy = y + lift;
-    if (sy < -22 || sy > HEIGHT) continue;
+    if (sy < -22) break;
+    const tier = Math.min(railColors.length - 1, Math.floor(heightMetres(y) / 20));
+    const top = background === "black" && tier === 0 ? "#acbf9b" : railColors[tier];
     pixels(ctx, "#465453", x - 1, sy, width + 2, 7);
-    pixels(ctx, tops, x, sy, width, 2);
+    pixels(ctx, top, x, sy, width, 2);
     pixels(ctx, "#75826b", x + 2, sy + 2, width - 4, 3);
     for (let rivet = x + 6; rivet < x + width - 4; rivet += 13) {
       pixels(ctx, "#a7b381", rivet, sy + 3, 3, 1);
@@ -188,9 +194,9 @@ function drawTower(ctx, lift, phase, background) {
       ctx.font = "bold 9px system-ui, sans-serif";
       ctx.textBaseline = "middle";
       ctx.textAlign = "right";
-      pixels(ctx, "#28343e", x + width - 50, sy - 43, 42, 11);
+      pixels(ctx, "#28343e", x + width - 58, sy - 43, 50, 11);
       ctx.fillStyle = "#fff3d5";
-      ctx.fillText("정상 30m", x + width - 10, sy - 37);
+      ctx.fillText(`정상 ${TOWER_HEIGHT}m`, x + width - 10, sy - 37, 46);
     }
   }
   const hazards = towerHazards(phase);
@@ -239,9 +245,9 @@ function drawTowerHud(ctx, players, { own, actual, leader }, lift) {
   };
   const height = Math.floor(heightMetres(actual.y));
   const atSummit = actual.y === SUMMIT_Y && actual.pose !== POSE.jump;
-  badge(atSummit ? `정상 · ${TOWER_HEIGHT}m` : `${height}m / ${TOWER_HEIGHT}m`, WIDTH - 75, 5, 70);
+  badge(atSummit ? `정상 · ${TOWER_HEIGHT}m` : `${height}m / ${TOWER_HEIGHT}m`, WIDTH - 85, 5, 80);
   if (leader?.point) {
-    badge(`👑 현재 1위 · ${leader.name}님 ${Math.floor(heightMetres(leader.point.y))}m`, 5, 5, WIDTH - 90);
+    badge(`👑 현재 1위 · ${leader.name}님 ${Math.floor(heightMetres(leader.point.y))}m`, 5, 5, WIDTH - 100);
   }
   const markers = offscreenPlayers(players, own, lift);
   for (const [direction, entries] of Object.entries(markers)) {

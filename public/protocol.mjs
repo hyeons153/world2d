@@ -2,7 +2,8 @@ export const WIDTH = 384;
 export const HEIGHT = 216;
 export const FLOOR = 170;
 export const LIMIT = 20;
-export const ROOM_VERSION = 2;
+// Static collision geometry is shared by the browser and room, so a new layout needs a matching version.
+export const ROOM_VERSION = 3;
 export const PIXELS = 32;
 export const MAX_MESSAGE = 23_000;
 export const MAX_GIF_FRAMES = 12;

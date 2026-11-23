@@ -9,29 +9,41 @@ function player(x, y = FLOOR, slot = 0) {
   return { slot, name: `친구${slot}`, spawnX: x, x, y, vy: 0, facing: 1, keys: 0, pose: POSE.idle, inputUntil: Infinity };
 }
 
-test("the real simulation can climb every one-way platform and land at 30 m", () => {
+test("the real simulation can climb every one-way platform and land at 100 m", () => {
   const climber = player(68);
-  // Wait for clear openings where the patrols and spike cycles cross the route.
-  const waits = new Map([[8, 13], [14, 16], [16, 23]]);
+  // One manual route through the full course. Some gaps need a walk to the edge
+  // before jumping, and some landings need a pause until the route is clear.
+  const starts = new Map([
+    [8, [279, 6, 5]], [9, [237, 4]], [12, [null, 0, 4]],
+    [22, [null, 0, 15]], [24, [197, 1]], [25, [153, 5, 15]],
+    [32, [110, 3]], [34, [112, 1]], [35, [151, 2]], [36, [187, 2]],
+    [37, [231, 4]], [38, [275, 5]], [39, [330, 9, 1]],
+    [42, [223, 3]], [43, [null, 0, 24]], [44, [152, 2]], [45, [114, 2]],
+    [50, [198, 2]], [51, [232, 1]], [52, [275, 4]], [57, [182, 3, 8]],
+    [60, [80, 2]],
+  ]);
+  const landingOffsets = new Map([[13, 8], [32, -8]]);
   let now = 0;
-  function step(keys) {
-    queueInput(climber, keys);
+  function step(goal, jump = false) {
+    const dx = goal - climber.x;
+    const direction = Math.abs(dx) <= WALK_SPEED * 0.05 * 0.62 ? 0 : dx > 0 ? KEY.right : KEY.left;
+    queueInput(climber, direction | (jump ? KEY.jump : 0));
     assert.equal(stepPlayers([climber], now += 50, 0.05).length, 0);
   }
   for (const [index, pad] of platforms.entries()) {
-    for (let wait = 0; wait < (waits.get(index) ?? 0); wait++) step(0);
+    const [launch, walk, wait = 0] = starts.get(index) ?? [null, 0];
+    for (let i = 0; i < walk; i++) step(launch);
+    for (let i = 0; i < wait; i++) step(climber.x);
+    const goal = pad.x + pad.width / 2 + (landingOffsets.get(index) ?? 0);
     for (let tick = 0; tick < 24; tick++) {
-      const dx = pad.x + pad.width / 2 - climber.x;
-      const direction = Math.abs(dx) <= WALK_SPEED * 0.05 ? 0 : dx > 0 ? KEY.right : KEY.left;
-      step(direction | (tick === 0 ? KEY.jump : 0));
+      step(goal, tick === 0);
       if (climber.grounded && climber.y === pad.y) break;
     }
     assert.equal(climber.y, pad.y, `platform ${index + 1}`);
     assert.equal(climber.grounded, true);
-    step(0);
   }
   assert.equal(climber.y, SUMMIT_Y);
-  assert.equal(heightMetres(climber.y), 30);
+  assert.equal(heightMetres(climber.y), 100);
 });
 
 test("spikes warn, retract, and knock the player back only when extended", () => {
@@ -109,7 +121,8 @@ test("snapshot preserves world heights, camera and resets; ranking and markers u
   const { above, below } = offscreenPlayers(everyone, own, own.cameraLift);
   assert.deepEqual(above.map(({ slot }) => slot), [2, 1]);
   assert.deepEqual(below.map(({ slot }) => slot), [4]);
-  assert.equal(above[1].distance, 12.5);
+  assert.equal(above[1].distance, 82.5);
+  assert.equal(packet.players.find(({ slot }) => slot === far.slot).y, SUMMIT_Y);
   far.y = FLOOR;
   assert.equal(currentLeader(everyone), near);
   near.y = visible.y;
