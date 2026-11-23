@@ -43,8 +43,8 @@ main.container { padding-block: 16px; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
 .playground { overflow: hidden; background: #273c34; border: 1px solid #273c34; border-radius: 14px; color: #f4f0dc; box-shadow: 0 6px 22px #34483812; }
 .scene-surface { position: relative; overflow: hidden; background: #273c34; }
-body[data-background="white"] .scene-surface { background: #fff; }
-body[data-background="black"] .scene-surface { background: #000; }
+body[data-background="white"] .scene-surface { background: #f2f1eb; }
+body[data-background="black"] .scene-surface { background: #191b20; }
 .scene-surface canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; image-rendering: crisp-edges; image-rendering: pixelated; }
 .game-message {
   position: absolute;
