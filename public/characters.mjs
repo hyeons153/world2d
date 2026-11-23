@@ -1,4 +1,5 @@
 import { MASCOT_ATLAS_URL } from "./mascot-atlas.mjs";
+import { createKurimanjuTile } from "./kurimanju-sprite.mjs";
 import { builtinCharacter, DEFAULT_CHARACTER, EFFECT, expandGifPixels, PIXELS, POSE } from "./protocol.mjs";
 
 export const characters = {
@@ -10,6 +11,7 @@ export const characters = {
   kani: { name: "카니", tile: 5 },
   dekatsuyo: { name: "데카츠요", tile: 6 },
   anoko: { name: "아노코", tile: 7 },
+  kurimanju: { name: "쿠리만쥬" },
 };
 
 const atlas = typeof Image === "function" ? new Image() : undefined;
@@ -21,6 +23,7 @@ if (atlas) {
 }
 
 const customSprites = new WeakMap();
+let kurimanjuTile;
 
 // The shoulder sits at the edge of each sprite. The arm is drawn on top at native pixel scale.
 const punchArms = {
@@ -32,6 +35,7 @@ const punchArms = {
   kani: [9, -12, "#ffe6d6"],
   dekatsuyo: [11, -13, "#fbed99"],
   anoko: [9, -12, "#f9f5ed"],
+  kurimanju: [9, -12, "#ffdfa9"],
   custom: [10, -13, "#f9f5ed"],
 };
 
@@ -106,9 +110,14 @@ function drawPunchArm(ctx, id, pose, bob, extended) {
 }
 
 function drawBuiltin(ctx, id, step, pose) {
+  const height = pose === POSE.sit ? 28 : pose === POSE.jump ? 31 : PIXELS;
+  if (id === "kurimanju") {
+    kurimanjuTile ??= createKurimanjuTile();
+    ctx.drawImage(kurimanjuTile, -PIXELS / 2, -height - step, PIXELS, height);
+    return;
+  }
   if (!atlas) return;
   const { tile } = characters[id];
-  const height = pose === POSE.sit ? 28 : pose === POSE.jump ? 31 : PIXELS;
   ctx.drawImage(atlas, tile * ATLAS_PIXELS, 0, ATLAS_PIXELS, ATLAS_PIXELS, -PIXELS / 2, -height - step, PIXELS, height);
 }
 

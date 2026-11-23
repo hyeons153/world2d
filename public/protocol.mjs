@@ -9,7 +9,9 @@ export const MAX_MESSAGE = 23_000;
 export const MAX_GIF_FRAMES = 12;
 export const MAX_GIF_DELAY = 5000;
 export const DEFAULT_CHARACTER = "chiikawa";
-export const DEFAULTS = [DEFAULT_CHARACTER, "usagi", "hachiware", "rakko", "shisa", "kani", "dekatsuyo", "anoko"];
+export const DEFAULTS = [
+  DEFAULT_CHARACTER, "usagi", "hachiware", "rakko", "shisa", "kani", "dekatsuyo", "anoko", "kurimanju",
+];
 export const POSE = { idle: 0, walk: 1, run: 2, jump: 3, sit: 4, wave: 5 };
 export const KEY = { left: 1, right: 2, jump: 4, attack: 8 };
 export const INPUT_MASK = KEY.left | KEY.right | KEY.jump | KEY.attack;
