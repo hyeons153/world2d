@@ -494,8 +494,11 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) reset
 window.addEventListener("pagehide", () => { resetInput(); connection?.stop(); });
 window.addEventListener("pageshow", (event) => { if (event.persisted && playing) connection?.start(); });
 
-for (const button of document.querySelectorAll("#touch button")) {
-  button.addEventListener("contextmenu", (event) => event.preventDefault());
+const touchControls = $("touch");
+for (const type of ["contextmenu", "selectstart"]) {
+  touchControls.addEventListener(type, (event) => event.preventDefault());
+}
+for (const button of touchControls.querySelectorAll("button")) {
   button.addEventListener("pointerdown", (event) => {
     if (!playing || pipWindow || event.button !== 0) return;
     event.preventDefault();
