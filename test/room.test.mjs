@@ -5,8 +5,7 @@ import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { createPlayground } from "../server/local.mjs";
 import { Room } from "../server/room.mjs";
-import { movePlayer } from "../public/movement.mjs";
-import { decodeSnapshot, FLOOR, KEY, LIMIT, PIXELS, POSE } from "../public/protocol.mjs";
+import { decodeSnapshot, FLOOR, KEY, LIMIT, PIXELS, POSE, ROOM_VERSION } from "../public/protocol.mjs";
 
 async function waitFor(predicate, description, timeout = 4_000) {
   const end = Date.now() + timeout;
@@ -17,55 +16,6 @@ async function waitFor(predicate, description, timeout = 4_000) {
   }
   assert.fail(description);
 }
-
-test("automatic movement can be disabled per player without disabling manual controls", (t) => {
-  const room = new Room();
-  t.after(() => clearInterval(room.timer));
-  const firstToken = randomBytes(16).toString("hex");
-  const secondToken = randomBytes(16).toString("hex");
-  const enter = (token, autoMove) => {
-    const peer = { send() {}, close() {} };
-    room.accept(peer);
-    room.receive(peer, JSON.stringify({ t: "join", token, name: "친구", character: "anoko", autoMove }));
-    return peer;
-  };
-  const first = enter(firstToken, true);
-  enter(secondToken);
-  const player = room.players.get(firstToken);
-  const other = room.players.get(secondToken);
-  const tick = () => movePlayer(player, room.active(), Date.now(), 0.05);
-  const send = (message) => room.receive(first, JSON.stringify(message));
-
-  Object.assign(player, { autoPose: POSE.walk, target: player.x + 30, nextAction: Infinity });
-  const before = player.x;
-  tick();
-  assert.ok(player.x > before);
-
-  send({ t: "auto-move", enabled: false });
-  const stopped = player.x;
-  tick();
-  assert.equal(player.x, stopped);
-  assert.equal(player.pose, POSE.idle);
-  assert.equal(other.autoMove, true);
-
-  send({ t: "input", keys: KEY.right | KEY.jump });
-  tick();
-  assert.ok(player.x > stopped);
-  assert.ok(player.y < FLOOR);
-  send({ t: "input", keys: 0 });
-  const released = player.x;
-  for (let step = 0; step < 20; step++) tick();
-  assert.equal(player.x, released);
-  assert.equal(player.y, FLOOR);
-
-  send({ t: "auto-move", enabled: true });
-  assert.equal(player.autoMove, true);
-  const reconnected = enter(firstToken, false);
-  assert.equal(player.socket, reconnected);
-  assert.equal(player.autoMove, false);
-  tick();
-  assert.equal(player.x, released);
-});
 
 test("one WebSocket room shares characters, motion and reconnects with a 20-player cap", { timeout: 13_000 }, async (t) => {
   const { server, room } = createPlayground();
@@ -94,7 +44,10 @@ test("one WebSocket room shares characters, motion and reconnects with a 20-play
     ws.addEventListener("close", (event) => { client.closed = event.code; });
     ws.addEventListener("message", ({ data }) => {
       if (typeof data !== "string") {
-        const entries = decodeSnapshot(data);
+        const { players: entries, phase, leader } = decodeSnapshot(data);
+        client.phase = phase;
+        client.leader = leader;
+        client.packetBytes = data.byteLength;
         client.snapshots++;
         client.arrival.push(Date.now());
         client.points = new Map(entries.map((point) => [point.slot, point]));
@@ -106,7 +59,7 @@ test("one WebSocket room shares characters, motion and reconnects with a 20-play
       if (message.t === "left") client.roster.delete(message.slot);
     });
     await once(ws, "open");
-    client.send({ t: "join", name: "친구", character: "sprout", ...profile, token: client.token });
+    client.send({ t: "join", name: "친구", character: "sprout", version: ROOM_VERSION, ...profile, token: client.token });
     return client;
   }
 
@@ -121,13 +74,13 @@ test("one WebSocket room shares characters, motion and reconnects with a 20-play
   await waitFor(() => b.points.get(a.slot)?.y < FLOOR && b.points.get(a.slot)?.x > initial + 2, "remote sees movement and jump");
   await waitFor(() => a.points.get(a.slot)?.x > initial + 15, "local receives authoritative movement");
   a.send({ t: "input", keys: 0 });
-  await waitFor(() => !room.players.get(a.token).keys && a.points.get(a.slot)?.pose !== POSE.jump, "released input resumes automatic behavior");
-  const startAuto = a.points.get(a.slot);
-  await waitFor(() => {
-    const point = a.points.get(a.slot);
-    return point && (Math.abs(point.x - startAuto.x) > 1 || point.pose !== startAuto.pose);
-  }, "automatic activity is sent to clients", 4_500);
+  await waitFor(() => !room.players.get(a.token).keys && a.points.get(a.slot)?.pose !== POSE.jump, "released input returns to idle");
+  const idleX = a.points.get(a.slot).x;
+  await delay(200);
+  assert.equal(a.points.get(a.slot).x, idleX);
 
+  const oldClient = await connect({ version: 1 });
+  await waitFor(() => oldClient.closed === 4005, "incompatible clients receive a refresh code");
   const c = await connect({ token: a.token });
   await waitFor(() => a.closed === 4001 && c.slot === a.slot, "a second tab replaces the old connection");
   assert.equal(b.roster.size, 2);
@@ -148,6 +101,7 @@ test("one WebSocket room shares characters, motion and reconnects with a 20-play
   const counts = all.map(({ snapshots }) => snapshots);
   await delay(1_100);
   assert.ok(all.every((client, index) => client.snapshots >= counts[index] + 7), "20 players receive a steady snapshot cadence");
+  assert.ok(all.every((client) => client.packetBytes === 184), "20 players fit in 184-byte snapshots");
   assert.equal(new Set(all.map(({ slot }) => slot)).size, LIMIT);
   for (const point of d.points.values()) {
     assert.equal(point.y, FLOOR);

@@ -2,6 +2,7 @@ export const WIDTH = 384;
 export const HEIGHT = 216;
 export const FLOOR = 170;
 export const LIMIT = 20;
+export const ROOM_VERSION = 2;
 export const PIXELS = 32;
 export const MAX_MESSAGE = 23_000;
 export const MAX_GIF_FRAMES = 12;
@@ -77,33 +78,47 @@ export function expandGifPixels(pixels) {
   return rgba;
 }
 
-export function encodeSnapshot(players) {
-  const bytes = new Uint8Array(players.length * 5);
+const SNAPSHOT_TAG = 254;
+const SNAPSHOT_HEADER = 4;
+const SNAPSHOT_PLAYER = 9;
+
+export function encodeSnapshot(players, phase, leader) {
+  const bytes = new Uint8Array(SNAPSHOT_HEADER + players.length * SNAPSHOT_PLAYER);
   const view = new DataView(bytes.buffer);
+  bytes[0] = SNAPSHOT_TAG;
+  bytes[1] = leader ?? 255;
+  view.setUint16(2, phase, true);
   players.forEach((player, index) => {
-    const offset = index * 5;
+    const offset = SNAPSHOT_HEADER + index * SNAPSHOT_PLAYER;
     bytes[offset] = player.slot;
     view.setUint16(offset + 1, Math.round(player.x * 4), true);
-    bytes[offset + 3] = Math.round(player.y);
-    bytes[offset + 4] = player.pose | (player.facing < 0 ? 8 : 0) | (player.effects & EFFECT_MASK);
+    view.setInt16(offset + 3, Math.round(player.y * 4), true);
+    view.setUint16(offset + 5, Math.round((player.cameraLift ?? 0) * 4), true);
+    bytes[offset + 7] = player.pose | (player.facing < 0 ? 8 : 0) | (player.effects & EFFECT_MASK);
+    bytes[offset + 8] = player.descent ?? 0;
   });
   return bytes;
 }
 
 export function decodeSnapshot(buffer) {
-  if (buffer.byteLength % 5 !== 0 || buffer.byteLength > LIMIT * 5) return [];
+  const payload = buffer.byteLength - SNAPSHOT_HEADER;
+  if (payload < 0 || payload % SNAPSHOT_PLAYER !== 0 || payload > (LIMIT + 1) * SNAPSHOT_PLAYER) return null;
   const view = new DataView(buffer);
+  if (view.getUint8(0) !== SNAPSHOT_TAG) return null;
   const players = [];
-  for (let offset = 0; offset < view.byteLength; offset += 5) {
-    const flags = view.getUint8(offset + 4);
+  for (let offset = SNAPSHOT_HEADER; offset < view.byteLength; offset += SNAPSHOT_PLAYER) {
+    const flags = view.getUint8(offset + 7);
     players.push({
       slot: view.getUint8(offset),
       x: view.getUint16(offset + 1, true) / 4,
-      y: view.getUint8(offset + 3),
+      y: view.getInt16(offset + 3, true) / 4,
+      cameraLift: view.getUint16(offset + 5, true) / 4,
       pose: flags & 7,
       facing: flags & 8 ? -1 : 1,
       effects: flags & EFFECT_MASK,
+      descent: view.getUint8(offset + 8),
     });
   }
-  return players;
+  const leader = view.getUint8(1);
+  return { players, phase: view.getUint16(2, true), leader: leader < LIMIT ? leader : undefined };
 }

@@ -32,12 +32,10 @@ button:focus-visible, input:focus-visible { outline: 2px solid #617b4b; outline-
   white-space: nowrap;
 }
 .header-controls button:hover { background: #e9ecde; }
-.background-buttons button[aria-pressed="true"], .auto-move-button[aria-pressed="true"] {
+.background-buttons button[aria-pressed="true"] {
   background: #e9efda;
   border-color: #83956f;
 }
-.auto-move-button { min-width: 70px; }
-.auto-move-button span { font-weight: 750; }
 .pip-button { display: inline-flex; align-items: center; gap: 4px; font-weight: 750; }
 main.container { padding-block: 16px; }
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; }
@@ -188,7 +186,6 @@ body[data-playing] .touch { flex-shrink: 0; }
   .header-controls, .background-buttons { gap: 3px; }
   .header-controls button { padding-inline: 4px; }
   .header-controls .back-button { min-width: 28px; }
-  .auto-move-button { min-width: 62px; }
   .pip-button svg { display: none; }
   .touch, .touch div { gap: 5px; }
   .touch button { min-width: 46px; padding-inline: 6px; }

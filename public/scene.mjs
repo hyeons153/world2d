@@ -1,6 +1,7 @@
 import { characters, drawCharacter, RENDER_SCALE } from "./characters.mjs";
 import { drawEmote, EMOTE_SIZE } from "./emotes.mjs";
 import { EFFECT, WIDTH, HEIGHT, FLOOR, POSE, validEmote } from "./protocol.mjs";
+import { BODY_HEIGHT, heightMetres, offscreenPlayers, platforms, SUMMIT_Y, towerHazards, TOWER_HEIGHT } from "./tower.mjs";
 
 function pixels(ctx, color, x, y, width, height) {
   ctx.fillStyle = color;
@@ -153,10 +154,111 @@ function drawEffects(ctx, player, x, y) {
   }
 }
 
-export function drawScene(canvas, players, now, ownSlot = -1, background = "original") {
+function drawUpperSky(ctx, lift) {
+  if (!lift) return;
+  const palette = ["#9095bb", "#838cb5", "#777fac", "#6c76a3", "#636d98", "#59658e"];
+  for (let height = 0; height < lift; height += 86) {
+    const y = lift - height;
+    pixels(ctx, palette[Math.min(palette.length - 1, height / 86)], 0, y - 86, WIDTH, 86);
+  }
+  for (let index = 0; index < 25; index++) {
+    const y = lift - (index * 43 + 19) % 475;
+    if (y > 0 && y < lift - 10) {
+      const x = (index * 71 + 25) % WIDTH;
+      pixels(ctx, "#d5c3ce", x, y, index % 5 ? 1 : 3, 1);
+      if (index % 5 === 0) cloud(ctx, x - 30, y + 4, 45, "#bcb1cc", "#a69dbd");
+    }
+  }
+}
+
+function drawTower(ctx, lift, phase, background) {
+  const tops = background === "black" ? "#acbf9b" : "#c9d693";
+  for (const { x, y, width } of platforms) {
+    const sy = y + lift;
+    if (sy < -22 || sy > HEIGHT) continue;
+    pixels(ctx, "#465453", x - 1, sy, width + 2, 7);
+    pixels(ctx, tops, x, sy, width, 2);
+    pixels(ctx, "#75826b", x + 2, sy + 2, width - 4, 3);
+    for (let rivet = x + 6; rivet < x + width - 4; rivet += 13) {
+      pixels(ctx, "#a7b381", rivet, sy + 3, 3, 1);
+    }
+    if (y === SUMMIT_Y) {
+      pixels(ctx, "#48525d", x + width - 10, sy - 32, 2, 32);
+      shape(ctx, "#f6d483", [x + width - 8, sy - 31, x + width + 7, sy - 26, x + width - 8, sy - 21]);
+      ctx.font = "bold 9px system-ui, sans-serif";
+      ctx.textBaseline = "middle";
+      ctx.textAlign = "right";
+      pixels(ctx, "#28343e", x + width - 50, sy - 43, 42, 11);
+      ctx.fillStyle = "#fff3d5";
+      ctx.fillText("정상 30m", x + width - 10, sy - 37);
+    }
+  }
+  const hazards = towerHazards(phase);
+  for (const { x, y, width, state } of hazards.spikes) {
+    const sy = y + lift;
+    if (sy < 0 || sy > HEIGHT + 10) continue;
+    const color = state === "warning" ? "#ffd176" : "#b97b70";
+    for (let column = x; column < x + width; column += 5) {
+      pixels(ctx, "#695459", column, sy - 1, 4, 3);
+      if (state === "warning") pixels(ctx, color, column + 1, sy - 3, 2, 2);
+      if (state === "up") {
+        pixels(ctx, "#624e5c", column, sy - 4, 5, 4);
+        pixels(ctx, color, column + 1, sy - 7, 3, 6);
+        pixels(ctx, "#f6ddbc", column + 2, sy - 10, 1, 4);
+      }
+    }
+  }
+  for (const bird of hazards.birds) {
+    const y = bird.y + lift;
+    if (y < -12 || y > HEIGHT + 12) continue;
+    ctx.save();
+    ctx.translate(Math.round(bird.x), y);
+    ctx.scale(bird.facing, 1);
+    const wing = Math.floor(phase / 120) % 2 ? 0 : -6;
+    pixels(ctx, "#45425b", -10, -1, 16, 4);
+    pixels(ctx, "#45425b", 1, -5, 7, 7);
+    pixels(ctx, "#9e98c4", -7, 0, 12, 4);
+    pixels(ctx, "#ddd0e3", 2, -4, 5, 5);
+    pixels(ctx, "#45425b", 5, -3, 1, 2);
+    pixels(ctx, "#f3bf75", 7, -2, 3, 2);
+    pixels(ctx, "#5c5580", -6, wing, 8, 4);
+    pixels(ctx, "#aaa1cc", -4, wing, 4, 3);
+    ctx.restore();
+  }
+}
+
+function drawTowerHud(ctx, players, { own, actual, leader }, lift) {
+  ctx.font = "bold 10px system-ui, sans-serif";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const badge = (label, x, y, maxWidth) => {
+    const width = Math.min(maxWidth, Math.ceil(ctx.measureText(label).width) + 10);
+    pixels(ctx, "#222e38db", x, y, width, 13);
+    ctx.fillStyle = "#fff6df";
+    ctx.fillText(label, x + 5, y + 6.5, width - 10);
+  };
+  const height = Math.floor(heightMetres(actual.y));
+  const atSummit = actual.y === SUMMIT_Y && actual.pose !== POSE.jump;
+  badge(atSummit ? `정상 · ${TOWER_HEIGHT}m` : `${height}m / ${TOWER_HEIGHT}m`, WIDTH - 75, 5, 70);
+  if (leader?.point) {
+    badge(`👑 현재 1위 · ${leader.name}님 ${Math.floor(heightMetres(leader.point.y))}m`, 5, 5, WIDTH - 90);
+  }
+  const markers = offscreenPlayers(players, own, lift);
+  for (const [direction, entries] of Object.entries(markers)) {
+    entries.forEach((player, index) => {
+      const x = 5 + (index % 3) * 125;
+      const row = Math.floor(index / 3) * 14;
+      const y = direction === "above" ? 20 + row : HEIGHT - 16 - row;
+      badge(`${direction === "above" ? "↑" : "↓"} ${player.name} · ${Math.max(1, Math.round(player.distance))}m`, x, y, 121);
+    });
+  }
+}
+
+export function drawScene(canvas, players, now, ownSlot = -1, background = "original", tower) {
   const ctx = canvas.getContext("2d", { alpha: false });
   ctx.setTransform(RENDER_SCALE, 0, 0, RENDER_SCALE, 0, 0);
   ctx.imageSmoothingEnabled = false;
+  const lift = Math.round(tower?.own.cameraLift ?? 0);
   let shadow = "#698353";
   if (background === "white" || background === "black") {
     const white = background === "white";
@@ -164,24 +266,29 @@ export function drawScene(canvas, players, now, ownSlot = -1, background = "orig
     shadow = white ? "#d8d7d0" : "#32343a";
   } else {
     backdrop ??= makeBackdrop();
-    ctx.drawImage(backdrop, 0, 0);
+    drawUpperSky(ctx, lift);
+    ctx.drawImage(backdrop, 0, lift);
     for (const mote of motes) {
       const glow = Math.sin(now / 730 + mote.phase);
       if (glow < 0.05) continue;
       const x = Math.floor(mote.x + 3 * Math.sin(now / 970 + mote.phase));
-      const y = Math.floor(mote.y + 3 * Math.cos(now / 1100 + mote.phase));
+      const y = lift + Math.floor(mote.y + 3 * Math.cos(now / 1100 + mote.phase));
       pixels(ctx, glow > 0.58 ? "#fff1bb" : "#cbd2a0", x, y, glow > 0.82 ? 2 : 1, 1);
     }
   }
-  const ordered = [...players].sort((a, b) => a.y - b.y || a.slot - b.slot);
+  if (tower) drawTower(ctx, lift, tower.phase, background);
+  const ordered = players.filter((player) => player.y + lift + 15 >= 0 &&
+    player.y + lift - BODY_HEIGHT - EMOTE_SIZE - 12 < HEIGHT).sort((a, b) => a.y - b.y || a.slot - b.slot);
   for (const player of ordered) {
     const x = Math.round(player.x);
-    pixels(ctx, shadow, x - 10, FLOOR, 20, 2);
-    pixels(ctx, shadow, x - 7, FLOOR + 2, 14, 1);
-    drawCharacter(ctx, player.character, player.sprite, player.x, player.y,
+    if (player.y >= FLOOR - 38) {
+      pixels(ctx, shadow, x - 10, FLOOR + lift, 20, 2);
+      pixels(ctx, shadow, x - 7, FLOOR + lift + 2, 14, 1);
+    }
+    drawCharacter(ctx, player.character, player.sprite, player.x, player.y + lift,
       player.pose, player.facing, now, player.slot, player.effects);
   }
-  for (const player of ordered) drawEffects(ctx, player, Math.round(player.x), Math.round(player.y));
+  for (const player of ordered) drawEffects(ctx, player, Math.round(player.x), Math.round(player.y) + lift);
   ctx.font = "bold 9px system-ui, sans-serif";
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
@@ -191,7 +298,7 @@ export function drawScene(canvas, players, now, ownSlot = -1, background = "orig
     const emote = validEmote(player.emote) ? player.emote : undefined;
     const extent = emote ? Math.max(width, EMOTE_SIZE) : width;
     const x = Math.min(WIDTH - extent / 2 - 2, Math.max(extent / 2 + 2, Math.round(player.x)));
-    const feet = Math.round(player.y);
+    const feet = Math.round(player.y) + lift;
     const nameTop = feet + 4;
     const mine = player.slot === ownSlot;
     pixels(ctx, mine ? "#eef1ad" : "#344d49", x - width / 2, nameTop, width, 11);
@@ -199,6 +306,7 @@ export function drawScene(canvas, players, now, ownSlot = -1, background = "orig
     ctx.fillText(player.name, x, nameTop + 5.5, width - 5);
     if (emote) drawEmote(ctx, emote, Math.round(x) - Math.floor(EMOTE_SIZE / 2), feet - EMOTE_SIZE - 45);
   }
+  if (tower) drawTowerHud(ctx, players, tower, lift);
 }
 
 const starters = Object.keys(characters);

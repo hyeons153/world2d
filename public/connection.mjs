@@ -1,5 +1,5 @@
 import { hosted, roomUrl } from "./config.mjs";
-import { KEEPALIVE, validEmote } from "./protocol.mjs";
+import { KEEPALIVE, ROOM_VERSION, validEmote } from "./protocol.mjs";
 
 export const roomAvailable = !hosted || Boolean(roomUrl);
 
@@ -38,7 +38,7 @@ export class Connection {
     this.lastPacket = Date.now();
     const current = () => this.active && this.socket === socket;
     socket.addEventListener("open", () => {
-      if (current()) this.send({ t: "join", ...this.profile });
+      if (current()) this.send({ t: "join", ...this.profile, version: ROOM_VERSION });
     });
     socket.addEventListener("message", (event) => {
       if (!current()) return;
@@ -49,6 +49,11 @@ export class Connection {
       }
       const message = JSON.parse(event.data);
       if (message.t === "welcome") {
+        if (message.version !== ROOM_VERSION) {
+          this.stop();
+          this.events.ended(4005);
+          return;
+        }
         this.joined = true;
         this.attempt = 0;
         this.events.welcome(message.slot);
@@ -66,7 +71,7 @@ export class Connection {
       clearInterval(this.heartbeat);
       this.joined = false;
       this.socket = undefined;
-      if ([4001, 4003, 4004].includes(event.code)) {
+      if ([4001, 4003, 4004, 4005].includes(event.code)) {
         this.stop();
         this.events.ended(event.code);
         return;
@@ -96,11 +101,6 @@ export class Connection {
 
   emote(emote) {
     if (this.joined) this.send({ t: "emote", emote });
-  }
-
-  setAutoMove(enabled) {
-    this.profile.autoMove = enabled;
-    if (this.joined) this.send({ t: "auto-move", enabled });
   }
 
   stop() {

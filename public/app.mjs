@@ -1,14 +1,14 @@
 import { characters, drawCharacter, readSprite, RENDER_SCALE } from "./characters.mjs";
 import { Connection, roomAvailable } from "./connection.mjs";
-import { queueInput, setAutoMove, stepPlayers } from "./movement.mjs";
+import { queueInput, stepPlayers } from "./movement.mjs";
 import { builtinCharacter, decodeSnapshot, DEFAULT_CHARACTER, EMOTE_COOLDOWN, EMOTE_DURATION, FLOOR, HEIGHT, KEY, nickname, PIXELS, POSE, validSprite, WIDTH } from "./protocol.mjs";
 import { drawScene, previewPlayers } from "./scene.mjs";
+import { worldPhase } from "./tower.mjs";
 
 const $ = (id) => document.getElementById(id);
 const scene = $("scene");
 const form = $("entry");
 const pipButton = $("pip");
-const autoMoveButton = $("auto-move");
 const backgroundButtons = [...document.querySelectorAll("[data-map-background]")];
 const backButton = $("back-to-entry");
 const deleteDialog = $("delete-dialog");
@@ -23,7 +23,6 @@ let saved;
 try { saved = JSON.parse(localStorage.getItem(savedKey)); } catch {}
 let settings;
 try { settings = JSON.parse(localStorage.getItem(settingsKey)); } catch {}
-let autoMove = false;
 const savedBackground = settings?.background;
 let background = backgroundButtons.some((button) => button.dataset.mapBackground === savedBackground) ? savedBackground : "original";
 $("nickname").value = nickname(saved?.name);
@@ -41,6 +40,7 @@ let localPlayer;
 let ownSlot = -1;
 let connection;
 let state;
+let snapshot;
 let pipWindow;
 let pipCanvas;
 let stopPipKeys;
@@ -52,11 +52,6 @@ function saveSettings() {
   try { localStorage.setItem(settingsKey, JSON.stringify({ background })); } catch {}
 }
 
-function showAutoMove() {
-  autoMoveButton.setAttribute("aria-pressed", String(autoMove));
-  autoMoveButton.lastElementChild.textContent = autoMove ? "ON" : "OFF";
-}
-
 function showBackground() {
   for (const button of backgroundButtons) {
     button.setAttribute("aria-pressed", String(button.dataset.mapBackground === background));
@@ -65,12 +60,6 @@ function showBackground() {
   if (pipWindow && !pipWindow.closed) pipWindow.document.documentElement.dataset.background = background;
 }
 
-autoMoveButton.addEventListener("click", () => {
-  autoMove = !autoMove;
-  if (localPlayer) setAutoMove(localPlayer, autoMove, performance.now());
-  connection?.setAutoMove(autoMove);
-  showAutoMove();
-});
 for (const button of backgroundButtons) {
   button.addEventListener("click", () => {
     background = button.dataset.mapBackground;
@@ -232,13 +221,13 @@ function setPlaying(next) {
   form.hidden = next;
   $("touch").hidden = !next || !supportsTouch;
   backButton.hidden = !next;
-  autoMoveButton.hidden = !next;
   pipButton.hidden = !next || !supportsPip;
   if (next) {
     scene.focus({ preventScroll: true });
     window.scrollTo(0, 0);
   } else {
     localPlayer = undefined;
+    snapshot = undefined;
     ownSlot = -1;
     state = undefined;
     message("connection-message", "");
@@ -281,11 +270,9 @@ form.addEventListener("submit", async (event) => {
     message("entry-message", "");
     message("play-message", "");
     const profile = { name, character: selected, sprite: selected === "custom" ? sprite : undefined };
-    autoMove = false;
-    showAutoMove();
     localPlayer = {
-      ...profile, slot: -1, x: WIDTH / 2, y: FLOOR, vy: 0, facing: 1, pose: POSE.idle,
-      keys: 0, inputUntil: Infinity, autoMove, nextAction: performance.now() + 550,
+      ...profile, slot: -1, x: WIDTH / 2, spawnX: WIDTH / 2, y: FLOOR, vy: 0, facing: 1,
+      pose: POSE.idle, cameraLift: 0, keys: 0, inputUntil: Infinity,
     };
     setPlaying(true);
     showConnection(roomAvailable ? "connecting" : "offline");
@@ -293,15 +280,12 @@ form.addEventListener("submit", async (event) => {
 
     const token = await browserIdentity();
     if (attempt !== roomAttempt) return;
-    connection = new Connection({ token, ...profile, autoMove }, {
+    connection = new Connection({ token, ...profile }, {
       state: showConnection,
       welcome(slot) {
         ownSlot = slot;
         localPlayer.slot = slot;
-        localPlayer.jumpQueued = false;
-        localPlayer.attackQueued = false;
         players.clear();
-        connection.setAutoMove(autoMove);
         if (sent) connection.input(sent);
       },
       roster(entry) {
@@ -317,11 +301,14 @@ form.addEventListener("submit", async (event) => {
         if (player) player.impactSide = side;
       },
       snapshot(buffer) {
+        const packet = decodeSnapshot(buffer);
+        if (!packet) return;
         const now = performance.now();
-        for (const sample of decodeSnapshot(buffer)) {
+        snapshot = { phase: packet.phase, leader: packet.leader, at: now };
+        for (const sample of packet.players) {
           const player = players.get(sample.slot);
           if (!player) continue;
-          player.from = player.point ? interpolate(player, now) : sample;
+          player.from = player.point?.descent === sample.descent ? interpolate(player, now) : sample;
           player.point = sample;
           player.at = now;
         }
@@ -331,6 +318,7 @@ form.addEventListener("submit", async (event) => {
         leaveRoom();
         const errors = {
           0: roomUnavailable,
+          4005: "서버와 게임 버전이 달라요. 잠시 후 페이지를 새로고침해 주세요.",
           4001: "이 브라우저의 다른 탭에서 입장했어요.",
           4003: "공터가 가득 찼거나 연결이 몰렸어요. 잠시 후 다시 들어와 주세요.",
           4004: "닉네임이나 캐릭터를 확인한 뒤 다시 입장해 주세요.",
@@ -357,9 +345,10 @@ function showConnection(next) {
     const player = players.get(ownSlot);
     if (player?.point) {
       const now = performance.now();
-      Object.assign(localPlayer, player.point, interpolate(player, now), { vy: 0, autoPose: POSE.idle, nextAction: now + 550 });
+      Object.assign(localPlayer, player.point, interpolate(player, now));
     }
     players.clear();
+    snapshot = undefined;
     resetInput();
   }
   state = next;
@@ -372,6 +361,7 @@ function interpolate(player, now) {
   return {
     x: player.from.x + (player.point.x - player.from.x) * t,
     y: player.from.y + (player.point.y - player.from.y) * t,
+    cameraLift: player.from.cameraLift + (player.point.cameraLift - player.from.cameraLift) * t,
   };
 }
 
@@ -380,8 +370,12 @@ function paint() {
   const dt = Math.min((now - lastPaint) / 1000, 0.09);
   lastPaint = now;
   let visible;
+  let tower;
   if (playing) {
     visible = [];
+    // The local preview has no room connection or remote players.
+    const phase = snapshot ? worldPhase(snapshot.phase + Math.min(now - snapshot.at, 105) - 105) : worldPhase(Date.now());
+    if (!roomAvailable) stepPlayers([localPlayer], now, dt, phase);
     for (const player of players.values()) {
       if (player.point) {
         const expression = player.slot === ownSlot ? localPlayer : player;
@@ -392,14 +386,17 @@ function paint() {
       }
     }
     if (!players.get(ownSlot)?.point) {
-      stepPlayers([localPlayer], now, dt);
       visible.push({ ...localPlayer, emote: now < localPlayer.emoteUntil ? localPlayer.emote : undefined });
     }
+    const own = visible.find((player) => player.slot === ownSlot) ?? localPlayer;
+    const actual = players.get(ownSlot)?.point ?? own;
+    // Follow the same snapshot timeline as the interpolated players.
+    tower = { own, actual, phase, leader: players.get(snapshot?.leader) };
   } else {
     visible = previewPlayers(now);
   }
-  if (!document.hidden || !pipCanvas) drawScene(scene, visible, now, playing ? ownSlot : -1, background);
-  if (pipCanvas) drawScene(pipCanvas, visible, now, ownSlot, background);
+  if (!document.hidden || !pipCanvas) drawScene(scene, visible, now, playing ? ownSlot : -1, background, tower);
+  if (pipCanvas) drawScene(pipCanvas, visible, now, ownSlot, background, tower);
 }
 
 function queuePaint() {
@@ -432,17 +429,13 @@ function submitInput() {
   for (const key of pressed.values()) mask |= key;
   for (const touch of touches.values()) mask |= touch.key;
   if (mask === sent) return;
-  if (localPlayer) {
-    if (players.get(ownSlot)?.point) localPlayer.keys = mask;
-    else queueInput(localPlayer, mask);
-    if (!mask) localPlayer.nextAction = performance.now();
-  }
+  if (!roomAvailable && localPlayer) queueInput(localPlayer, mask);
   sent = mask;
   connection?.input(mask);
 }
 
 function resetInput() {
-  if (localPlayer) {
+  if (!roomAvailable && localPlayer) {
     localPlayer.jumpQueued = false;
     localPlayer.attackQueued = false;
   }

@@ -1,4 +1,5 @@
-import { EFFECT, FLOOR, KEY, POSE, WIDTH } from "./protocol.mjs";
+import { EFFECT, FLOOR, KEY, POSE } from "./protocol.mjs";
+import { belowCamera, clampX, climbCamera, platforms, SKY_LIMIT, towerHazards, worldPhase } from "./tower.mjs";
 
 export const WALK_SPEED = 47;
 const JUMP_SPEED = 168;
@@ -10,21 +11,37 @@ const ATTACK_COOLDOWN = 420;
 const ATTACK_WINDUP = 100;
 const ATTACK_EXTENSION = 140;
 const ATTACK_RECOVERY = 100;
+const FOOT_RADIUS = 7;
 
 export function movementDirection(keys) {
   return Number(Boolean(keys & KEY.right)) - Number(Boolean(keys & KEY.left));
 }
 
-export function advancePlayer(player, { direction, speed, jump, pose, knockback = 0 }, dt) {
-  if (jump && player.y === FLOOR) player.vy = -JUMP_SPEED;
+function overlapsPlatform(x, platform) {
+  return x + FOOT_RADIUS > platform.x && x - FOOT_RADIUS < platform.x + platform.width;
+}
+
+function advancePlayer(player, { direction, jump, knockback }, dt) {
+  const startY = player.y;
+  const grounded = !player.vy && (startY === FLOOR ||
+    platforms.some((platform) => startY === platform.y && overlapsPlatform(player.x, platform)));
+  if (jump && grounded) player.vy = -JUMP_SPEED;
   if (direction) player.facing = direction;
-  player.x = Math.max(20, Math.min(WIDTH - 20, player.x + (direction * speed + knockback) * dt));
-  if (player.y !== FLOOR || player.vy < 0) {
-    player.vy += 360 * dt;
-    player.y = Math.min(FLOOR, player.y + player.vy * dt);
-    if (player.y === FLOOR) player.vy = 0;
+  player.x = clampX(player.x + (direction * WALK_SPEED + knockback) * dt);
+  player.vy += 360 * dt;
+  const nextY = Math.max(SKY_LIMIT, startY + player.vy * dt);
+  let surface;
+  if (player.vy >= 0) {
+    for (const platform of platforms) {
+      if (platform.y < startY || platform.y > nextY || !overlapsPlatform(player.x, platform)) continue;
+      if (surface === undefined || platform.y < surface) surface = platform.y;
+    }
+    if (surface === undefined && nextY >= FLOOR) surface = FLOOR;
   }
-  player.pose = player.y < FLOOR ? POSE.jump : pose;
+  player.y = surface ?? nextY;
+  if (surface !== undefined || nextY === SKY_LIMIT) player.vy = 0;
+  player.grounded = surface !== undefined;
+  player.pose = player.grounded ? (direction ? POSE.walk : POSE.idle) : POSE.jump;
 }
 
 export function queueInput(player, keys) {
@@ -34,57 +51,52 @@ export function queueInput(player, keys) {
   player.keys = keys;
 }
 
-export function setAutoMove(player, enabled, now) {
-  if (player.autoMove === enabled) return;
-  player.autoMove = enabled;
-  player.autoPose = POSE.idle;
-  player.nextAction = now;
-}
-
-const between = (min, max) => min + Math.random() * (max - min);
-
-export function movePlayer(player, players, now, dt) {
-  if (now > player.inputUntil && player.keys) {
-    player.keys = 0;
-    player.nextAction = now;
-  }
-  let direction = 0;
-  let speed = WALK_SPEED;
-  let pose = POSE.idle;
-  let jump = player.jumpQueued;
-  let knockback = 0;
+function movePlayer(player, now, dt) {
+  if (now > player.inputUntil) player.keys = 0;
+  const stunned = now < player.stunnedUntil;
+  advancePlayer(player, {
+    direction: stunned ? 0 : movementDirection(player.keys),
+    jump: !stunned && player.jumpQueued,
+    knockback: stunned ? player.knockback * 83 : 0,
+  }, dt);
   player.jumpQueued = false;
-  if (now < player.stunnedUntil) {
-    knockback = player.knockback * 83;
-    jump = false;
-  } else if (player.keys) {
-    direction = movementDirection(player.keys);
-    if (direction) pose = POSE.walk;
-    player.nextAction = now;
-  } else if (player.autoMove !== false) {
-    const grounded = player.y === FLOOR;
-    if (now >= player.nextAction && grounded) jump = chooseAction(player, players, now) || jump;
-    pose = player.autoPose ?? POSE.idle;
-    if (pose === POSE.walk || pose === POSE.run) {
-      const delta = player.target - player.x;
-      direction = Math.abs(delta) > 2 ? Math.sign(delta) : 0;
-      speed = pose === POSE.run ? 57 : 26;
-      if (!direction) {
-        player.autoPose = POSE.idle;
-        pose = POSE.idle;
-      }
-    }
-  }
-  advancePlayer(player, { direction, speed, jump, pose, knockback }, dt);
 }
 
-export function stepPlayers(players, now, dt) {
+function hit(player, side, now, impacts) {
+  player.hitUntil = now + 230;
+  player.stunnedUntil = player.hitUntil;
+  player.knockback = side;
+  player.x = clampX(player.x + side * 4);
+  impacts.push({ slot: player.slot, side: -side });
+}
+
+function hitHazard(player, hazards, now, impacts) {
+  if (now < player.stunnedUntil) return;
+  for (const spike of hazards.spikes) {
+    if (spike.state !== "up" || player.x + 8 <= spike.x || player.x - 8 >= spike.x + spike.width ||
+        player.y < spike.y - 10 || player.y - HEAD_HEIGHT >= spike.y) continue;
+    hit(player, player.x < spike.x + spike.width / 2 ? -1 : 1, now, impacts);
+    player.vy = -80;
+    player.grounded = false;
+    return;
+  }
+  for (const bird of hazards.birds) {
+    if (Math.abs(player.x - bird.x) >= 18 || player.y < bird.y - 5 || player.y - HEAD_HEIGHT > bird.y + 5) continue;
+    hit(player, bird.facing, now, impacts);
+    player.vy = Math.max(player.vy, 65);
+    player.grounded = false;
+    return;
+  }
+}
+
+export function stepPlayers(players, now, dt, phase = worldPhase(now)) {
   const previousHeights = players.map((player) => player.y);
   const strikes = [];
   const impacts = [];
+  const hazards = towerHazards(phase);
   for (const player of players) {
-    if (player.y === FLOOR) player.stompedPlayers = undefined;
-    movePlayer(player, players, now, dt);
+    movePlayer(player, now, dt);
+    hitHazard(player, hazards, now, impacts);
     const interrupted = now < player.stunnedUntil || now < player.squashUntil;
     if (interrupted) {
       player.strikeAt = undefined;
@@ -121,6 +133,7 @@ export function stepPlayers(players, now, dt) {
       jumper.stompedPlayers.add(landedOn);
       jumper.y = surface;
       jumper.vy = -103;
+      jumper.grounded = false;
       jumper.pose = POSE.jump;
     }
   }
@@ -138,47 +151,25 @@ export function stepPlayers(players, now, dt) {
       const distance = (target.x - attacker.x) * attacker.facing;
       if (target === attacker || distance < -2 || distance > HIT_REACH ||
           Math.abs(target.y - attacker.y) > HIT_HEIGHT || now < target.stunnedUntil) continue;
-      target.hitUntil = now + 230;
-      target.stunnedUntil = now + 230;
-      target.knockback = attacker.facing;
-      impacts.push({ slot: target.slot, side: -attacker.facing });
-      // The next simulation ticks carry the target away from the attacker.
-      target.x = Math.max(20, Math.min(WIDTH - 20, target.x + target.knockback * 4));
+      hit(target, attacker.facing, now, impacts);
     }
   }
 
   for (const player of players) {
+    if (player.grounded) player.stompedPlayers = undefined;
+    player.cameraLift = climbCamera(player.cameraLift, player.y);
+    if (belowCamera(player.y, player.cameraLift)) {
+      Object.assign(player, {
+        x: player.spawnX, y: FLOOR, vy: 0, grounded: true, cameraLift: 0, pose: POSE.idle,
+        descent: ((player.descent ?? 0) + 1) & 255,
+        stompedPlayers: undefined, strikeAt: undefined, attackUntil: 0, punchUntil: 0,
+        hitUntil: 0, squashUntil: 0, stunnedUntil: 0,
+      });
+    }
     player.effects = (now < player.attackUntil ? EFFECT.attack : 0) |
       (now < player.punchUntil ? EFFECT.punch : 0) |
       (now < player.hitUntil ? EFFECT.hit : 0) |
       (now < player.squashUntil ? EFFECT.squash : 0);
   }
   return impacts;
-}
-
-function chooseAction(player, players, now) {
-  const roll = Math.random();
-  const neighbours = players.filter((other) => other !== player && Math.abs(other.x - player.x) < 35);
-  if (roll < 0.57) {
-    const others = players.filter((other) => other !== player);
-    const other = others[Math.floor(Math.random() * others.length)];
-    player.target = other && roll < 0.29 ? other.x + between(-14, 14) : player.x + between(-76, 76);
-    player.autoPose = roll < 0.20 ? POSE.run : POSE.walk;
-    player.nextAction = now + between(750, 2400);
-  } else if (roll < 0.70) {
-    player.autoPose = POSE.idle;
-    player.nextAction = now + between(600, 1150);
-    return true;
-  } else if (roll < 0.86) {
-    player.autoPose = POSE.sit;
-    player.nextAction = now + between(700, 2300);
-  } else if (neighbours.length) {
-    player.autoPose = POSE.wave;
-    player.facing = Math.sign(neighbours[0].x - player.x) || player.facing;
-    player.nextAction = now + between(500, 1100);
-  } else {
-    player.autoPose = POSE.idle;
-    player.nextAction = now + between(350, 850);
-  }
-  return false;
 }

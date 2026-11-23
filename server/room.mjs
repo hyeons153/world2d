@@ -1,5 +1,6 @@
-import { queueInput, setAutoMove, stepPlayers } from "../public/movement.mjs";
-import { builtinCharacter, EMOTE_COOLDOWN, encodeSnapshot, FLOOR, INPUT_LEASE, INPUT_MASK, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, validEmote, validSprite } from "../public/protocol.mjs";
+import { queueInput, stepPlayers } from "../public/movement.mjs";
+import { builtinCharacter, EMOTE_COOLDOWN, encodeSnapshot, FLOOR, INPUT_LEASE, INPUT_MASK, KEY, LIMIT, MAX_MESSAGE, nickname, POSE, ROOM_VERSION, validEmote, validSprite } from "../public/protocol.mjs";
+import { currentLeader, worldPhase } from "../public/tower.mjs";
 
 const PULSE = 50;
 const EXPIRE = 38_000;
@@ -20,7 +21,7 @@ export class Room {
       this.practiceNpc = {
         slot: LIMIT, name: "연습 NPC", character: "rakko",
         x: PRACTICE_X, y: FLOOR, vy: 0, facing: -1, pose: POSE.idle,
-        autoMove: false, keys: 0, inputUntil: Infinity,
+        spawnX: PRACTICE_X, keys: 0, inputUntil: Infinity,
       };
     }
   }
@@ -57,14 +58,13 @@ export class Room {
     if (!message || typeof message !== "object") return this.close(socket, 1008, "invalid");
     if (!peer.player) {
       if (message.t !== "join") return this.close(socket, 1008, "join required");
+      if (message.version !== ROOM_VERSION) return this.close(socket, 4005, "refresh for tower");
       this.join(socket, peer, message, now);
       return;
     }
     peer.lastSeen = now;
     if (message.t === "ping") {
       this.send(socket, { t: "pong" });
-    } else if (message.t === "auto-move" && typeof message.enabled === "boolean") {
-      setAutoMove(peer.player, message.enabled, now);
     } else if (message.t === "emote" && validEmote(message.emote) && now >= (peer.player.emoteReadyAt ?? 0)) {
       peer.player.emoteReadyAt = now + EMOTE_COOLDOWN;
       this.broadcast({ t: "emote", slot: peer.player.slot, emote: message.emote }, socket);
@@ -72,8 +72,6 @@ export class Room {
       const player = peer.player;
       queueInput(player, message.keys);
       player.inputUntil = now + INPUT_LEASE;
-      // An idle player can resume automatic movement on the next tick.
-      if (!player.keys) player.nextAction = now;
     }
   }
 
@@ -97,11 +95,10 @@ export class Room {
     const slot = player && !used.has(player.slot)
       ? player.slot
       : Array.from({ length: LIMIT }, (_, index) => index).find((index) => !used.has(index));
-    player ??= {
-      slot, x: SPAWN[slot % SPAWN.length] + between(-9, 9), y: FLOOR, vy: 0,
-      facing: slot % 2 ? -1 : 1, pose: POSE.idle, nextAction: now + between(250, 950),
-      autoMove: message.autoMove !== false,
-    };
+    if (!player) {
+      const x = SPAWN[slot % SPAWN.length] + between(-9, 9);
+      player = { slot, x, spawnX: x, y: FLOOR, vy: 0, facing: slot % 2 ? -1 : 1, pose: POSE.idle };
+    }
     let sprite;
     if (custom) {
       const { frames, pixels, animation } = message.sprite;
@@ -113,12 +110,11 @@ export class Room {
       player.sprite?.animation?.pixels !== sprite?.animation?.pixels ||
       player.sprite?.animation?.delays.join() !== sprite?.animation?.delays.join();
     Object.assign(player, { slot, name, character, sprite, socket, keys: 0, inputUntil: 0, jumpQueued: false, attackQueued: false });
-    setAutoMove(player, message.autoMove !== false, now);
     this.players.set(message.token, player);
     peer.player = player;
     if (oldSocket) this.close(oldSocket, 4001, "replaced");
 
-    this.send(socket, { t: "welcome", slot });
+    this.send(socket, { t: "welcome", slot, version: ROOM_VERSION });
     for (const member of this.active()) this.send(socket, this.profile(member));
     if (this.practiceNpc) this.send(socket, this.profile(this.practiceNpc));
     if (announce) this.broadcast(this.profile(player), socket);
@@ -150,12 +146,8 @@ export class Room {
 
   snapshot() {
     const players = this.active();
-    const npc = this.practiceNpc;
-    // Keep each packet within the snapshot limit understood by already-open clients.
-    const separateNpc = npc && players.length === LIMIT;
-    if (npc && !separateNpc) players.push(npc);
-    this.broadcast(encodeSnapshot(players));
-    if (separateNpc) this.broadcast(encodeSnapshot([npc]));
+    if (this.practiceNpc) players.push(this.practiceNpc);
+    this.broadcast(encodeSnapshot(players, worldPhase(this.lastStep), currentLeader(players)?.slot));
     this.lastSnapshot = Date.now();
   }
 
@@ -176,6 +168,7 @@ export class Room {
       player.attackQueued = false;
       player.disconnectedAt = Date.now();
       this.broadcast({ t: "left", slot: player.slot });
+      if (this.active().length) this.snapshot();
     }
   }
 

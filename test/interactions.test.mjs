@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { decodeSnapshot, EFFECT, EMOTE_COOLDOWN, FLOOR, KEY, LIMIT, POSE } from "../public/protocol.mjs";
+import { decodeSnapshot, EFFECT, EMOTE_COOLDOWN, FLOOR, KEY, LIMIT, POSE, ROOM_VERSION } from "../public/protocol.mjs";
 import { Room } from "../server/room.mjs";
 
 function setup(t, options) {
@@ -14,14 +14,14 @@ function setup(t, options) {
     const roster = [];
     const peer = {
       send(message) {
-        if (message instanceof Uint8Array) packets.push(decodeSnapshot(message.buffer));
+        if (message instanceof Uint8Array) packets.push(decodeSnapshot(message.buffer).players);
         else roster.push(JSON.parse(message));
       },
       close() {},
     };
     const receive = (message) => room.receive(peer, JSON.stringify(message));
     room.accept(peer);
-    receive({ t: "join", token, name: "친구", character: "chiikawa", autoMove: false });
+    receive({ t: "join", token, name: "친구", character: "chiikawa", version: ROOM_VERSION });
     const player = room.players.get(token);
     Object.assign(player, { x, facing: 1 });
     const input = (keys) => receive({ t: "input", keys });
@@ -177,6 +177,6 @@ test("the optional practice NPC can be hit and does not use a player slot", (t) 
 
   for (let index = 1; index < LIMIT; index++) enter(300);
   assert.equal(room.active().length, LIMIT);
-  assert.equal(attacker.packets.at(-2).length, LIMIT);
-  assert.deepEqual(attacker.packets.at(-1).map(({ slot }) => slot), [LIMIT]);
+  assert.equal(attacker.packets.at(-1).length, LIMIT + 1);
+  assert.equal(attacker.packets.at(-1).at(-1).slot, LIMIT);
 });

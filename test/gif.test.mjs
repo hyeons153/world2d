@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { normalizeGif } from "../public/gif-image.mjs";
-import { expandGifPixels, MAX_GIF_FRAMES, MAX_MESSAGE, PIXELS, validSprite } from "../public/protocol.mjs";
+import { expandGifPixels, MAX_GIF_FRAMES, MAX_MESSAGE, PIXELS, validSprite, ROOM_VERSION } from "../public/protocol.mjs";
 import { Room } from "../server/room.mjs";
 
 function twoColorGif(frameCount) {
@@ -35,7 +35,7 @@ test("long GIFs are sampled and fit within the multiplayer message budget", () =
   assert.ok(sprite.animation.delays.every((delay) => delay === 100));
   const indices = new Set(Buffer.from(sprite.animation.pixels, "base64"));
   assert.equal(indices.size, 3);
-  const message = JSON.stringify({ t: "join", token: "1".repeat(32), name: "친구😀".repeat(4), character: "custom", sprite });
+  const message = JSON.stringify({ t: "join", version: ROOM_VERSION, token: "1".repeat(32), name: "친구😀".repeat(4), character: "custom", sprite });
   assert.ok(Buffer.byteLength(message) < MAX_MESSAGE);
   assert.equal(validSprite({ ...sprite, animation: { ...sprite.animation, delays: [0] } }), false);
 });
@@ -51,9 +51,9 @@ test("the room shares normalized GIF data with other players", (t) => {
   const owner = { send() {}, close() {} };
   room.accept(friend);
   room.accept(owner);
-  room.receive(friend, JSON.stringify({ t: "join", name: "친구", token: "1".repeat(32), character: "anoko" }));
+  room.receive(friend, JSON.stringify({ t: "join", version: ROOM_VERSION, name: "친구", token: "1".repeat(32), character: "anoko" }));
   const sprite = normalizeGif(twoColorGif(2));
-  room.receive(owner, JSON.stringify({ t: "join", name: "내 GIF", token: "2".repeat(32), character: "custom", sprite }));
+  room.receive(owner, JSON.stringify({ t: "join", version: ROOM_VERSION, name: "내 GIF", token: "2".repeat(32), character: "custom", sprite }));
   const custom = received.find((message) => message.t === "player" && message.character === "custom");
   assert.deepEqual(custom?.sprite, sprite);
 });
