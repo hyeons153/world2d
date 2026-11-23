@@ -160,8 +160,8 @@ export function drawScene(canvas, players, now, ownSlot = -1, background = "orig
   let shadow = "#698353";
   if (background === "white" || background === "black") {
     const white = background === "white";
-    pixels(ctx, white ? "#fff" : "#000", 0, 0, WIDTH, HEIGHT);
-    shadow = white ? "#dedede" : "#252525";
+    pixels(ctx, white ? "#f2f1eb" : "#191b20", 0, 0, WIDTH, HEIGHT);
+    shadow = white ? "#d8d7d0" : "#32343a";
   } else {
     backdrop ??= makeBackdrop();
     ctx.drawImage(backdrop, 0, 0);
